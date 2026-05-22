@@ -11,10 +11,10 @@ export async function ensureBluetoothReady(): Promise<void> {
     throw new Error('Bluetooth SPP is only available on Android.');
   }
 
-  const enabled = await BluetoothSerial.isEnabled();
+  const { enabled } = await BluetoothSerial.isEnabled();
   if (!enabled) {
     const canEnable = await BluetoothSerial.canEnable();
-    if (canEnable) {
+    if (canEnable.enabled) {
       await BluetoothSerial.enable();
     } else {
       throw new Error('Enable Bluetooth in system settings.');

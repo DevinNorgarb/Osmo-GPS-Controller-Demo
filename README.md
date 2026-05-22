@@ -199,6 +199,11 @@ For a more comprehensive understanding of the demo, refer to the following docum
 
 - **ESP32-C6-WROOM-1**: [ESP32-C6-DevKitC-1 v1.2 - ESP32-C6 User Guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html)
 
+
+## Phone GPS app
+
+Vue/Ionic Android companion (HC-05 NMEA over Bluetooth Classic): [phone-bt-gps/README.md](phone-bt-gps/README.md).
+
 ## About PR
 
 The DJI development team is dedicated to enhancing your development experience and welcomes your contributions. However, please note that PR code reviews may take some time. If you have any questions, feel free to contact us via email.

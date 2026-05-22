@@ -1,5 +1,7 @@
 # Osmo BT GPS (Android)
 
+This directory is a **sibling project** to the ESP32 firmware in this repository (PlatformIO / ESP-IDF under `main/`, `logic/`, and related folders at the repo root).
+
 Minimal **Vue 3 + Ionic 8 + Capacitor 8** app that streams the phone’s GPS as **NMEA 0183** over **Bluetooth Classic SPP** to an **HC-05 / HC-06** module wired to the ESP32 UART on the [Osmo GPS Controller Demo](../README.md).
 
 **Android only** — HC-05 uses Classic Bluetooth, not BLE.
