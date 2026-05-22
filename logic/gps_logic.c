@@ -588,6 +588,50 @@ void gps_push_data() {
  * 配置并初始化 GPS UART，用于接收 GPS 数据。
  * Configure and initialize GPS UART for receiving GPS data.
  */
+/**
+ * @brief Log a UART chunk safely (binary / wrong baud shows as hex, not blank %s)
+ */
+static void log_gps_uart_chunk(const uint8_t *data, int len) {
+    bool has_nmea = false;
+    for (int i = 0; i < len; i++) {
+        if (data[i] == '$') {
+            has_nmea = true;
+            break;
+        }
+    }
+
+    if (has_nmea) {
+        char line[128];
+        int line_len = 0;
+        for (int i = 0; i < len && line_len < (int)sizeof(line) - 1; i++) {
+            char c = (char)data[i];
+            if (c == '\r' || c == '\n') {
+                if (line_len > 0) {
+                    line[line_len] = '\0';
+                    if (line[0] == '$') {
+                        ESP_LOGI("RX_TASK_GPS", "NMEA: %s", line);
+                    }
+                    line_len = 0;
+                }
+            } else if (line_len < (int)sizeof(line) - 1) {
+                line[line_len++] = c;
+            }
+        }
+        if (line_len > 0 && line[0] == '$') {
+            line[line_len] = '\0';
+            ESP_LOGI("RX_TASK_GPS", "NMEA: %s", line);
+        }
+    } else {
+        int hex_len = len < 16 ? len : 16;
+        char hex[16 * 3 + 1];
+        int pos = 0;
+        for (int i = 0; i < hex_len && pos < (int)sizeof(hex) - 4; i++) {
+            pos += snprintf(hex + pos, sizeof(hex) - pos, "%02X ", data[i]);
+        }
+        ESP_LOGW("RX_TASK_GPS", "RX %d bytes, no $ (check HC-05 baud=115200): %s", len, hex);
+    }
+}
+
 static void initUartGps(void)
 {
     const uart_config_t uart_config = {
@@ -630,7 +674,7 @@ static void rx_task_GPS(void *arg)
 
             data[rxBytes] = '\0';
 
-            ESP_LOGI(RX_TASK_TAG, "BT/UART RX %d bytes: %s", rxBytes, (char *)data);
+            log_gps_uart_chunk(data, rxBytes);
 
             // 将读取到的数据存储到全局缓冲区 buff_t 中
             // Store the read data into global buffer buff_t
