@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -44,6 +44,9 @@
 /* 最长保留时间（单位：秒），超过此时间没有被使用的条目会被清除 */
 /* Maximum retention time in seconds, entries unused beyond this time will be cleared */
 #define MAX_ENTRY_AGE 120
+
+/* BLE notify path runs protocol parse + hex logging; 2048 words overflows on ESP32 */
+#define NOTIFY_PROCESSING_TASK_STACK 8192
 
 static bool data_layer_initialized = false;
 
@@ -146,7 +149,7 @@ static void reset_entries(void) {
 /**
  * @brief Find entry by sequence number
  *        查找指定 seq 的条目
- * 
+ *
  * @param seq Sequence number to find
  *            需要查找的 seq 值
  * @return entry_t* Pointer to found entry, NULL if not found
@@ -165,7 +168,7 @@ static entry_t* find_entry_by_seq(uint16_t seq) {
 /**
  * @brief Find entry by command set and ID
  *        查找指定 cmd_set 和 cmd_id 的条目
- * 
+ *
  * @param cmd_set Command set
  *                命令集
  * @param cmd_id Command ID
@@ -175,7 +178,7 @@ static entry_t* find_entry_by_seq(uint16_t seq) {
  */
 static entry_t* find_entry_by_cmd_id(uint16_t cmd_set, uint16_t cmd_id) {
     for (int i = 0; i < MAX_SEQ_ENTRIES; i++) {
-        if (s_entries[i].in_use && !s_entries[i].is_seq_based && 
+        if (s_entries[i].in_use && !s_entries[i].is_seq_based &&
             s_entries[i].cmd_set == cmd_set && s_entries[i].cmd_id == cmd_id) {
             s_entries[i].last_access_time = xTaskGetTickCount();
             return &s_entries[i];
@@ -187,7 +190,7 @@ static entry_t* find_entry_by_cmd_id(uint16_t cmd_set, uint16_t cmd_id) {
 /**
  * @brief Free an entry
  *        释放一个条目
- * 
+ *
  * @param entry Pointer to the entry to be freed
  *              要释放的条目指针
  */
@@ -214,7 +217,7 @@ static void free_entry(entry_t *entry) {
 /**
  * @brief Allocate a free entry based on sequence number
  *        分配一个空闲的 entry，基于 seq
- * 
+ *
  * @param seq Frame sequence number
  *            帧序列号
  * @return entry_t* Pointer to allocated entry, NULL if failed
@@ -297,7 +300,7 @@ static entry_t* allocate_entry_by_seq(uint16_t seq) {
 /**
  * @brief Allocate a free entry based on command set and ID
  *        分配一个空闲的 entry，基于 cmd_set 和 cmd_id
- * 
+ *
  * @param cmd_set Command set
  *                命令集
  * @param cmd_id Command ID
@@ -385,12 +388,12 @@ static entry_t* allocate_entry_by_cmd(uint8_t cmd_set, uint8_t cmd_id) {
 /**
  * @brief Timer cleanup function
  *        定时清理函数
- * 
+ *
  * Clean up expired entries and delete unused entries.
  * Periodically run cleanup tasks to free up memory that is no longer needed.
  * 清理过期的条目，删除未使用的条目。
  * 定期运行清理任务，释放不再需要的内存。
- * 
+ *
  * @param xTimer Timer handle that triggered this callback
  *              触发此回调的定时器句柄
  */
@@ -420,7 +423,7 @@ static void cleanup_old_entries(TimerHandle_t xTimer) {
 /**
  * @brief Data layer initialization
  *        数据层初始化
- * 
+ *
  * Initialize data layer, including creating mutex, clearing entries, starting cleanup timer task, etc.
  * 初始化数据层，包括创建互斥锁、清空条目、启动定时清理任务等。
  */
@@ -455,7 +458,7 @@ void data_init(void) {
 
     // Initialize notification task
     // 初始化通知任务
-    if (xTaskCreate(notify_processing_task, "notify_processing_task", 2048, NULL, 1, &notify_task_handle) != pdPASS) {
+    if (xTaskCreate(notify_processing_task, "notify_processing_task", NOTIFY_PROCESSING_TASK_STACK, NULL, 1, &notify_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create notification processing task");
     }
 
@@ -468,7 +471,7 @@ void data_init(void) {
 /**
  * @brief Check if data layer is initialized
  *        检查数据层是否已初始化
- * 
+ *
  * @return bool Returns true if data layer is initialized, false otherwise
  *              如果数据层已初始化，返回 true；否则返回 false
  */
@@ -479,17 +482,17 @@ bool is_data_layer_initialized(void) {
 /**
  * @brief Send data frame with response
  *        发送数据帧（有响应）
- * 
+ *
  * Send data frame to device via BLE and wait for response.
  * 通过 BLE 向设备发送数据帧，并等待响应。
- * 
+ *
  * @param seq Frame sequence number
  *            数据帧的序列号
  * @param raw_data Data to be sent
  *                 需要发送的数据
  * @param raw_data_length Length of data
  *                        数据长度
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
@@ -551,17 +554,17 @@ esp_err_t data_write_with_response(uint16_t seq, const uint8_t *raw_data, size_t
 /**
  * @brief Send data frame without response
  *        发送数据帧（无响应）
- * 
+ *
  * Send data frame to device via BLE without waiting for response.
  * 通过 BLE 向设备发送数据帧，且不等待响应。
- * 
+ *
  * @param seq Frame sequence number
  *            数据帧的序列号
  * @param raw_data Data to be sent
  *                 需要发送的数据
  * @param raw_data_length Length of data
  *                        数据长度
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
@@ -630,10 +633,10 @@ esp_err_t data_write_without_response(uint16_t seq, const uint8_t *raw_data, siz
 /**
  * @brief Wait for parsing result of specific sequence number
  *        等待特定 seq 的解析结果
- * 
+ *
  * Wait for parsing result of a specific sequence number and return to caller.
  * 等待一个特定 seq 的解析结果，并返回给调用者。
- * 
+ *
  * @param seq Frame sequence number
  *            数据帧的序列号
  * @param timeout_ms Timeout in milliseconds
@@ -642,7 +645,7 @@ esp_err_t data_write_without_response(uint16_t seq, const uint8_t *raw_data, siz
  *                   返回解析结果
  * @param out_result_length Return length of parsed result
  *                          返回解析结果的长度
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
@@ -746,10 +749,10 @@ esp_err_t data_wait_for_result_by_seq(uint16_t seq, int timeout_ms, void **out_r
 /**
  * @brief Wait for parsing result by command set and ID, and return sequence number
  *        等待特定 cmd_set 和 cmd_id 的解析结果，并返回 seq
- * 
+ *
  * Wait for parsing result of a specific command set and ID, and return its corresponding sequence number.
  * 等待一个特定 cmd_set 和 cmd_id 的解析结果，并返回其对应的 seq 值。
- * 
+ *
  * @param cmd_set Command set
  *                命令集
  * @param cmd_id Command ID
@@ -762,7 +765,7 @@ esp_err_t data_wait_for_result_by_seq(uint16_t seq, int timeout_ms, void **out_r
  *                   返回解析结果
  * @param out_result_length Return length of parsed result
  *                          返回解析结果的长度
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
@@ -803,25 +806,25 @@ esp_err_t data_wait_for_result_by_cmd(uint8_t cmd_set, uint8_t cmd_id, int timeo
                     xSemaphoreGive(s_map_mutex);
                     return ESP_ERR_NO_MEM;
                 }
-                
+
                 // Copy entry->parse_result data to out_result
                 // 拷贝 entry->parse_result 数据到 out_result
                 memcpy(*out_result, entry->parse_result, entry->parse_result_length);
                 *out_result_length = entry->parse_result_length;
                 *out_seq = entry->seq;
-                
+
                 // Free entry
                 // 释放条目
                 free_entry(entry);
                 xSemaphoreGive(s_map_mutex);
                 return ESP_OK;
             }
-            
+
             // Entry exists but no result yet, need to wait
             // 条目存在但还没有结果，需要等待
             SemaphoreHandle_t sem_to_wait = entry->sem;
             xSemaphoreGive(s_map_mutex);
-            
+
             // Wait for semaphore to be released
             // 等待信号量被释放
             if (xSemaphoreTake(sem_to_wait, timeout_ticks) != pdTRUE) {
@@ -837,14 +840,14 @@ esp_err_t data_wait_for_result_by_cmd(uint8_t cmd_set, uint8_t cmd_id, int timeo
                 }
                 return ESP_ERR_TIMEOUT;
             }
-            
+
             // Re-acquire mutex to get the result
             // 重新获取互斥锁以获取结果
             if (xSemaphoreTake(s_map_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
                 ESP_LOGE(TAG, "Failed to take mutex after semaphore wait");
                 return ESP_ERR_INVALID_STATE;
             }
-            
+
             // Find entry again after waiting
             // 等待后重新查找条目
             entry = find_entry_by_cmd_id(cmd_set, cmd_id);
@@ -853,7 +856,7 @@ esp_err_t data_wait_for_result_by_cmd(uint8_t cmd_set, uint8_t cmd_id, int timeo
                 xSemaphoreGive(s_map_mutex);
                 return ESP_ERR_NOT_FOUND;
             }
-            
+
             // Get parsing result
             // 取出解析结果
             if (entry->parse_result) {
@@ -909,11 +912,11 @@ esp_err_t data_wait_for_result_by_cmd(uint8_t cmd_set, uint8_t cmd_id, int timeo
 /**
  * @brief Register camera status update callback
  *        注册相机状态更新回调函数
- * 
+ *
  * This function registers a callback function for camera status updates. After registration,
  * the callback function will be called to synchronize the latest camera status when specific notifications are received.
  * 此函数用于注册一个相机状态更新的回调函数。注册后，当接收到特定的通知时，会调用该回调函数同步相机最新状态。
- * 
+ *
  * @param callback Callback function pointer, pointing to user-defined callback function
  *                 回调函数指针，指向用户定义的回调函数
  */
@@ -930,16 +933,16 @@ void data_register_new_status_update_callback(new_camera_status_update_cb_t call
 /**
  * @brief Task for processing notification data
  *        处理通知数据的任务
- * 
+ *
  * This task runs in task context and processes notification data from the queue
  * 此任务在任务上下文中运行，处理来自队列的通知数据
- * 
+ *
  * @param pvParameters Task parameters (unused)
  *                    任务参数（未使用）
  */
 static void notify_processing_task(void *pvParameters) {
     notify_data_t notify_data;
-    
+
     while (1) {
         // Wait for notification data from queue
         // 等待来自队列的通知数据
@@ -947,7 +950,7 @@ static void notify_processing_task(void *pvParameters) {
             // Process the notification data
             // 处理通知数据
             process_notification_data(notify_data.data, notify_data.data_length);
-            
+
             // Free the allocated data
             // 释放分配的数据
             free(notify_data.data);
@@ -958,10 +961,10 @@ static void notify_processing_task(void *pvParameters) {
 /**
  * @brief Process notification data (moved from interrupt context to task context)
  *        处理通知数据（从中断上下文移到任务上下文）
- * 
+ *
  * This function contains the original logic from receive_camera_notify_handler
  * 此函数包含来自 receive_camera_notify_handler 的原始逻辑
- * 
+ *
  * @param raw_data Raw notification data
  *                 原始通知数据
  * @param raw_data_length Data length
@@ -996,7 +999,7 @@ static void process_notification_data(const uint8_t *raw_data, size_t raw_data_l
         printf("] (%zu bytes)\n", raw_data_length);
         printf("\033[0m");
         printf("\033[0;32m");
-                                                             
+
         // Define parsing result structure
         // 定义解析结果结构体
         protocol_frame_t frame;
@@ -1122,10 +1125,10 @@ static void process_notification_data(const uint8_t *raw_data, size_t raw_data_l
 /**
  * @brief Handle camera notifications and parse data (callback function)
  *        处理相机通知并解析数据（回调函数）
- * 
+ *
  * This function is called from BLE interrupt context and queues the data for processing
  * 此函数从 BLE 中断上下文调用，并将数据排队等待处理
- * 
+ *
  * @param raw_data Raw notification data
  *                 原始通知数据
  * @param raw_data_length Data length
@@ -1174,13 +1177,13 @@ void receive_camera_notify_handler(const uint8_t *raw_data, size_t raw_data_leng
  *                        包含原始字节的字符串，支持多种格式
  * @param timeout_ms Timeout for waiting result (in milliseconds)
  *                   等待结果的超时时间（以毫秒为单位）
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
 esp_err_t data_send_raw_bytes(const char *raw_data_string, int timeout_ms) {
     ESP_LOGI(TAG, "%s: Sending raw bytes: %s", __FUNCTION__, raw_data_string);
-    
+
     if (raw_data_string == NULL) {
         ESP_LOGE(TAG, "Invalid input: raw_data_string is NULL");
         return ESP_ERR_INVALID_ARG;
@@ -1197,16 +1200,16 @@ esp_err_t data_send_raw_bytes(const char *raw_data_string, int timeout_ms) {
 
     size_t byte_count = 0;
     const char *ptr = raw_data_string;
-    
+
     while (*ptr && byte_count < max_bytes) {
         // Skip whitespace, commas, hyphens, colons
         // 跳过空格、逗号、连字符、冒号
         while (*ptr && (*ptr == ' ' || *ptr == ',' || *ptr == '-' || *ptr == ':')) {
             ptr++;
         }
-        
+
         if (!*ptr) break;
-        
+
         // Parse hex byte (support both uppercase and lowercase)
         // 解析十六进制字节（支持大小写）
         char hex_str[3] = {0};
@@ -1221,7 +1224,7 @@ esp_err_t data_send_raw_bytes(const char *raw_data_string, int timeout_ms) {
                 memmove(hex_str + 1, hex_str, 2);
                 hex_str[0] = '0';
             }
-            
+
             // Convert hex string to byte
             // 将十六进制字符串转换为字节
             char *endptr;
@@ -1259,9 +1262,9 @@ esp_err_t data_send_raw_bytes(const char *raw_data_string, int timeout_ms) {
     // 直接发送原始字节，使用虚拟序列号
     uint16_t dummy_seq = 0xFFFF;
     esp_err_t ret = data_write_without_response(dummy_seq, raw_bytes, byte_count);
-    
+
     free(raw_bytes);
-    
+
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send raw bytes, error: %s", esp_err_to_name(ret));
         return ret;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -30,6 +30,7 @@ extern uint8_t current_video_resolution;
 extern uint8_t current_fps_idx;
 extern uint8_t current_eis_mode;
 extern bool camera_status_initialized;
+extern uint16_t current_record_time;
 
 bool is_camera_recording();
 

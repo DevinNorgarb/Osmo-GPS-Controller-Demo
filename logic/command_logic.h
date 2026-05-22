@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -52,6 +52,8 @@ record_control_response_frame_t* command_logic_start_record(void);
 record_control_response_frame_t* command_logic_stop_record(void);
 
 gps_data_push_response_frame* command_logic_push_gps_data(const gps_data_push_command_frame *gps_data);
+
+key_report_response_frame_t* command_logic_key_report_record(void);
 
 key_report_response_frame_t* command_logic_key_report_qs(void);
 

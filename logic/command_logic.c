@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -49,7 +49,7 @@ uint16_t generate_seq(void) {
  *                        包含原始字节的字符串，支持多种格式
  * @param timeout_ms Timeout for waiting result (in milliseconds)
  *                   等待结果的超时时间（以毫秒为单位）
- * 
+ *
  * @return esp_err_t ESP_OK on success, error code on failure
  *                   成功返回 ESP_OK，失败返回错误码
  */
@@ -78,14 +78,14 @@ esp_err_t command_logic_send_raw_bytes(const char *raw_data_string, int timeout_
  *            序列号，用于匹配请求与响应
  * @param timeout_ms Timeout for waiting result (in milliseconds)
  *                   等待结果的超时时间（以毫秒为单位）
- * 
+ *
  * Note: The caller needs to free the dynamically allocated memory after using the returned structure.
  * 注意：调用方需要在使用完返回的结构体后释放动态分配的内存。
- * 
+ *
  * @return CommandResult Returns parsed structure pointer and data length on success, NULL pointer and length 0 on failure
  *                       成功返回解析后的结构体指针及数据长度，失败返回 NULL 指针及长度 0
  */
-CommandResult send_command(uint8_t cmd_set, uint8_t cmd_id, uint8_t cmd_type, const void *input_raw_data, uint16_t seq, int timeout_ms) { 
+CommandResult send_command(uint8_t cmd_set, uint8_t cmd_id, uint8_t cmd_type, const void *input_raw_data, uint16_t seq, int timeout_ms) {
     CommandResult result = { NULL, 0 };
 
     if(connect_logic_get_state() <= BLE_INIT_COMPLETE){
@@ -144,7 +144,7 @@ CommandResult send_command(uint8_t cmd_set, uint8_t cmd_id, uint8_t cmd_type, co
                 return result;
             }
             ESP_LOGI(TAG, "Data frame sent, waiting for response...");
-            
+
             ret = data_wait_for_result_by_seq(seq, timeout_ms, &structure_data, &structure_data_length);
             if (ret != ESP_OK) {
                 ESP_LOGW(TAG, "No result received, but continuing (seq=0x%04X)", seq);
@@ -198,7 +198,7 @@ CommandResult send_command(uint8_t cmd_set, uint8_t cmd_id, uint8_t cmd_type, co
  *
  * @param mode Camera mode
  *             相机模式
- * 
+ *
  * @return camera_mode_switch_response_frame_t* Returns parsed structure pointer, NULL on error
  *                                              返回解析后的结构体指针，如果发生错误返回 NULL
  */
@@ -246,8 +246,8 @@ camera_mode_switch_response_frame_t* command_logic_switch_camera_mode(camera_mod
  *
  * This function sends a query command to get device version information.
  * 该函数通过发送查询命令，获取设备的版本号信息。
- * 
- * The returned version information includes acknowledgment result (`ack_result`), 
+ *
+ * The returned version information includes acknowledgment result (`ack_result`),
  * product ID (`product_id`) and SDK version (`sdk_version`).
  * 返回的版本号信息包括应答结果 (`ack_result`)、产品 ID (`product_id`) 和 SDK 版本号 (`sdk_version`)。
  *
@@ -256,7 +256,7 @@ camera_mode_switch_response_frame_t* command_logic_switch_camera_mode(camera_mod
  */
 version_query_response_frame_t* command_logic_get_version(void) {
     ESP_LOGI(TAG, "%s: Querying device version", __FUNCTION__);
-    
+
     if (connect_logic_get_state() != PROTOCOL_CONNECTED) {
         ESP_LOGE(TAG, "Protocol connection to the camera failed. Current connection state: %d", connect_logic_get_state());
         return NULL;
@@ -281,7 +281,7 @@ version_query_response_frame_t* command_logic_get_version(void) {
     version_query_response_frame_t *response = (version_query_response_frame_t *)result.structure;
 
     ESP_LOGI(TAG, "Version Query Response: ack_result=%u, product_id=%s, sdk_version=%.*s",
-             response->ack_result, response->product_id, 
+             response->ack_result, response->product_id,
              (int)(result.length - (sizeof(uint16_t) + sizeof(response->product_id))),
              response->sdk_version);
 
@@ -382,7 +382,7 @@ record_control_response_frame_t* command_logic_stop_record(void) {
  *
  * @param gps_data Pointer to structure containing GPS data
  *                 指向包含 GPS 数据的结构体
- * 
+ *
  * @return gps_data_push_response_frame* Returns parsed response structure pointer, NULL on error
  *                                       返回解析后的应答结构体指针，如果发生错误返回 NULL
  */
@@ -417,6 +417,46 @@ gps_data_push_response_frame* command_logic_push_gps_data(const gps_data_push_co
     // Return response structure pointer
     // 返回应答结构体指针
     return (gps_data_push_response_frame *)result.structure;
+}
+
+/**
+ * @brief Record / shutter button key report (0011, key_code 0x01)
+ *        拍录按键上报（等同相机快门短按）
+ */
+key_report_response_frame_t* command_logic_key_report_record(void) {
+    ESP_LOGI(TAG, "%s: Reporting record/shutter key press", __FUNCTION__);
+
+    if (connect_logic_get_state() != PROTOCOL_CONNECTED) {
+        ESP_LOGE(TAG, "Protocol connection to the camera failed. Current connection state: %d",
+                 connect_logic_get_state());
+        return NULL;
+    }
+
+    uint16_t seq = generate_seq();
+
+    key_report_command_frame_t command_frame = {
+        .key_code = 0x01,
+        .mode = 0x01,
+        .key_value = 0x00,
+    };
+
+    CommandResult result = send_command(
+        0x00,
+        0x11,
+        CMD_RESPONSE_OR_NOT,
+        &command_frame,
+        seq,
+        5000
+    );
+
+    if (result.structure == NULL) {
+        ESP_LOGE(TAG, "Failed to send record key report");
+        return NULL;
+    }
+
+    key_report_response_frame_t *response = (key_report_response_frame_t *)result.structure;
+    ESP_LOGI(TAG, "Record key report response: ret_code=%d", response->ret_code);
+    return response;
 }
 
 /**
@@ -494,7 +534,7 @@ key_report_response_frame_t* command_logic_key_report_snapshot(void) {
         seq,
         5000
     );
-    
+
     if (result.structure == NULL) {
         ESP_LOGE(TAG, "Failed to send command or receive response");
         return NULL;

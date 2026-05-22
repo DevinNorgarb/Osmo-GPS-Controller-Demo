@@ -168,31 +168,28 @@ static void handle_boot_long_press() {
  * If camera is recording, stop recording.
  */
 static void handle_boot_single_press() {
-    // 获取当前相机模式
-    // Get current camera mode
-    camera_status_t current_status = current_camera_status;
-    camera_mode_t current_mode = current_camera_mode;
+    connect_state_t conn = connect_logic_get_state();
+    if (conn != PROTOCOL_CONNECTED) {
+        ESP_LOGW(TAG, "Single press ignored: not protocol-connected (state=%d). Long-press BOOT to connect first.",
+                 conn);
+        return;
+    }
 
-    // 处理不同的相机状态，这里也可以用 按键上报（0011）方式实现拍录控制
-    // Handle different camera states, recording control can also be implemented using Key Reporting (0011) method
-    if (current_mode == CAMERA_MODE_PHOTO || current_status == CAMERA_STATUS_LIVE_STREAMING) {
-        // 如果当前模式是拍照、直播，开始录制
-        // If current mode is photo or live streaming, start recording
-        ESP_LOGI(TAG, "Camera is live streaming. Starting recording...");
-        record_control_response_frame_t *start_record_response = command_logic_start_record();
-        if (start_record_response != NULL) {
-            ESP_LOGI(TAG, "Recording started successfully.");
-            free(start_record_response);
-        } else {
-            ESP_LOGE(TAG, "Failed to start recording.");
-            // 尝试唤醒
-            // Try to wake up
-            connect_logic_ble_wakeup();
-        }
-    } else if (is_camera_recording()) {
-        // 如果当前模式是拍照或录制中，停止录制
-        // If current mode is photo or recording, stop recording
-        ESP_LOGI(TAG, "Camera is recording or pre-recording. Stopping recording...");
+    print_camera_status();
+
+    /* DJI recommends Key Reporting (0011) — toggles like the camera shutter button. */
+    key_report_response_frame_t *key_response = command_logic_key_report_record();
+    if (key_response != NULL) {
+        ESP_LOGI(TAG, "Record key report sent (ret_code=%d).", key_response->ret_code);
+        free(key_response);
+        return;
+    }
+
+    ESP_LOGW(TAG, "Key report failed; falling back to 1D03 record control.");
+
+    if (is_camera_recording() || current_record_time > 0) {
+        ESP_LOGI(TAG, "Stopping recording (status=%u, record_time=%u)...",
+                 current_camera_status, current_record_time);
         record_control_response_frame_t *stop_record_response = command_logic_stop_record();
         if (stop_record_response != NULL) {
             ESP_LOGI(TAG, "Recording stopped successfully.");
@@ -201,7 +198,16 @@ static void handle_boot_single_press() {
             ESP_LOGE(TAG, "Failed to stop recording.");
         }
     } else {
-        ESP_LOGI(TAG, "Camera is in an unsupported mode for recording.");
+        ESP_LOGI(TAG, "Starting recording (mode=%u, status=%u)...",
+                 current_camera_mode, current_camera_status);
+        record_control_response_frame_t *start_record_response = command_logic_start_record();
+        if (start_record_response != NULL) {
+            ESP_LOGI(TAG, "Recording started successfully.");
+            free(start_record_response);
+        } else {
+            ESP_LOGE(TAG, "Failed to start recording; trying BLE wakeup.");
+            connect_logic_ble_wakeup();
+        }
     }
 
     /* QS 快速切换模式（可放入其他按键） */
@@ -277,7 +283,7 @@ static void key_scan_task(void *arg) {
             key_pressed = true;
             key_press_start_time = xTaskGetTickCount();
             current_key_event = KEY_EVENT_NONE;
-            // ESP_LOGI(TAG, "BOOT key pressed.");
+            ESP_LOGI(TAG, "BOOT key pressed (GPIO %d)", BOARD_BOOT_KEY_GPIO);
         } else if (new_key_state == 0 && key_pressed) { // 按键保持按下状态 / Key remains pressed
             TickType_t press_duration = xTaskGetTickCount() - key_press_start_time;
 
@@ -295,9 +301,11 @@ static void key_scan_task(void *arg) {
             if (press_duration < LONG_PRESS_THRESHOLD) {
                 // 单击事件 / Single press event
                 current_key_event = KEY_EVENT_SINGLE;
-                ESP_LOGI(TAG, "Single press detected. Duration: %lu ticks", press_duration);
-                // 处理单击事件：拍录控制 / Handle single press event: recording control
+                ESP_LOGI(TAG, "Single press detected (%lu ms).",
+                         (unsigned long)(press_duration * portTICK_PERIOD_MS));
                 handle_boot_single_press();
+            } else {
+                ESP_LOGI(TAG, "BOOT key released after long press (no single-click action).");
             }
 
             // 可以不做额外操作，因为长按的触发已经在按下过程中处理了

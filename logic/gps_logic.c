@@ -630,7 +630,7 @@ static void rx_task_GPS(void *arg)
 
             data[rxBytes] = '\0';
 
-            // ESP_LOGI(RX_TASK_TAG, "Read %d bytes: '%s'", rxBytes, data);
+            ESP_LOGI(RX_TASK_TAG, "BT/UART RX %d bytes: %s", rxBytes, (char *)data);
 
             // 将读取到的数据存储到全局缓冲区 buff_t 中
             // Store the read data into global buffer buff_t
@@ -646,9 +646,9 @@ static void rx_task_GPS(void *arg)
             // Give watchdog a chance to reset
             vTaskDelay(pdMS_TO_TICKS(5));
 
-            // 打印解析后的GPS数据
-            // Print parsed GPS data
-            // print_gps_data();
+            if (is_current_gps_data_valid()) {
+                print_gps_data();
+            }
 
             if(connect_logic_get_state() == PROTOCOL_CONNECTED && is_current_gps_data_valid()){
                 gps_push_data();
