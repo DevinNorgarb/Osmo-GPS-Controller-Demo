@@ -54,9 +54,10 @@ static TickType_t key_press_start_time = 0;
 
 /* key_scan_task only polls GPIO; BLE/protocol work needs a deeper stack on ESP32 */
 #define KEY_SCAN_TASK_STACK      2048
-#define KEY_CONNECT_TASK_STACK   8192
+#define KEY_WORKER_TASK_STACK    8192
 
 static TaskHandle_t s_connect_task_handle = NULL;
+static TaskHandle_t s_record_task_handle = NULL;
 
 /**
  * @brief 处理长按事件
@@ -244,6 +245,13 @@ static void key_connect_worker_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+static void key_record_worker_task(void *arg) {
+    (void)arg;
+    handle_boot_single_press();
+    s_record_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
 static void schedule_boot_long_press(void) {
     if (s_connect_task_handle != NULL) {
         ESP_LOGW(TAG, "Connect already in progress, ignoring long press");
@@ -252,13 +260,31 @@ static void schedule_boot_long_press(void) {
     BaseType_t ok = xTaskCreate(
         key_connect_worker_task,
         "key_connect",
-        KEY_CONNECT_TASK_STACK,
+        KEY_WORKER_TASK_STACK,
         NULL,
         2,
         &s_connect_task_handle);
     if (ok != pdPASS) {
         s_connect_task_handle = NULL;
-        ESP_LOGE(TAG, "Failed to start connect task (stack %d)", KEY_CONNECT_TASK_STACK);
+        ESP_LOGE(TAG, "Failed to start connect task (stack %d)", KEY_WORKER_TASK_STACK);
+    }
+}
+
+static void schedule_boot_single_press(void) {
+    if (s_record_task_handle != NULL) {
+        ESP_LOGW(TAG, "Record action already in progress, ignoring single press");
+        return;
+    }
+    BaseType_t ok = xTaskCreate(
+        key_record_worker_task,
+        "key_record",
+        KEY_WORKER_TASK_STACK,
+        NULL,
+        2,
+        &s_record_task_handle);
+    if (ok != pdPASS) {
+        s_record_task_handle = NULL;
+        ESP_LOGE(TAG, "Failed to start record task (stack %d)", KEY_WORKER_TASK_STACK);
     }
 }
 
@@ -303,7 +329,7 @@ static void key_scan_task(void *arg) {
                 current_key_event = KEY_EVENT_SINGLE;
                 ESP_LOGI(TAG, "Single press detected (%lu ms).",
                          (unsigned long)(press_duration * portTICK_PERIOD_MS));
-                handle_boot_single_press();
+                schedule_boot_single_press();
             } else {
                 ESP_LOGI(TAG, "BOOT key released after long press (no single-click action).");
             }
