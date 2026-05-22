@@ -74,7 +74,12 @@ static void set_rgb_color(uint8_t red, uint8_t green, uint8_t blue) {
 #else
     (void)green;
     (void)blue;
-    gpio_set_level(BOARD_LED_GPIO, (red | green | blue) ? 1 : 0);
+    const int on = (red | green | blue) ? 1 : 0;
+#if BOARD_LED_ACTIVE_LOW
+    gpio_set_level(BOARD_LED_GPIO, on ? 0 : 1);
+#else
+    gpio_set_level(BOARD_LED_GPIO, on);
+#endif
 #endif
 }
 

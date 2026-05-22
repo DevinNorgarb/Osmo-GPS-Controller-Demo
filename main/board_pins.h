@@ -17,15 +17,21 @@
 #define BOARD_GPS_TXD_PIN     GPIO_NUM_5
 #define BOARD_GPS_RXD_PIN     GPIO_NUM_4
 
-#else /* ESP32, ESP32-S2/S3 builds use the same devkit-style map when added */
+#else /* ESP32 (DOIT DevKit V1, WROVER-KIT, generic WROOM devkits) */
 
-/* BOOT = GPIO0 on most ESP32-DevKitC / WROVER-KIT boards */
+/* BOOT button on DOIT ESP32 DevKit V1 and most 30-pin WROOM boards */
 #define BOARD_BOOT_KEY_GPIO   GPIO_NUM_0
-/* Many WROOM/WROVER boards: single LED on GPIO2 (active-low on some kits) */
 #define BOARD_LED_GPIO        GPIO_NUM_2
 #define BOARD_HAS_RGB_LED     0
 #define BOARD_GPS_UART_PORT   UART_NUM_2
 #define BOARD_GPS_TXD_PIN     GPIO_NUM_17
 #define BOARD_GPS_RXD_PIN     GPIO_NUM_16
+
+/* DOIT onboard LED: on when GPIO is LOW (see platformio build_flags for this board) */
+#if defined(BOARD_DOIT_ESP32_DEVKIT_V1)
+#define BOARD_LED_ACTIVE_LOW  1
+#else
+#define BOARD_LED_ACTIVE_LOW  0
+#endif
 
 #endif

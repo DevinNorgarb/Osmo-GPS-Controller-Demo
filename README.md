@@ -54,24 +54,27 @@ Please ensure that the pins are correctly connected, especially the TX and RX pi
 
 | Board | PlatformIO env | BOOT button | Status LED |
 |-------|----------------|-------------|------------|
+| **DOIT ESP32 DevKit V1** | `esp32doit-devkit-v1` (default) | GPIO **0** | GPIO **2** (active-low) |
 | ESP32-C6-DevKitC-1 | `esp32-c6-devkitc-1` | GPIO **9** | Onboard **RGB** (GPIO 8) |
-| ESP32-WROOM devkit | `esp32dev` | GPIO **0** | Usually **GPIO 2** (single LED, on = any activity) |
-| ESP32-WROVER-KIT | `esp-wrover-kit` | GPIO **0** | Usually **GPIO 2** |
+| Generic ESP32-WROOM devkit | `esp32dev` | GPIO **0** | GPIO **2** |
+| ESP32-WROVER-KIT | `esp-wrover-kit` | GPIO **0** | GPIO **2** |
 
-WROOM/WROVER builds use the same BLE/camera logic as the C6 demo. Without an LC76G module you can still connect and control the camera; GPS/dashboard features need a GNSS module (or C6 + LC76G wiring on GPIO4/5 for C6 only).
+DOIT / WROOM / WROVER builds use the same BLE/camera logic as the C6 demo. Without an LC76G module you can still connect and control the camera; GPS/dashboard features need a GNSS module (or C6 + LC76G wiring on GPIO4/5 for C6 only).
 
 Pin map: [`main/board_pins.h`](main/board_pins.h).
 
 ### PlatformIO (optional)
 
-This repo includes [`platformio.ini`](platformio.ini) for [PlatformIO](https://platformio.org/) with `framework = espidf`. Pick your board:
+This repo includes [`platformio.ini`](platformio.ini) for [PlatformIO](https://platformio.org/) with `framework = espidf`. Default target is the **DOIT ESP32 DevKit V1**:
 
 ```bash
-pio run -e esp32dev          # ESP32-WROOM
-pio run -e esp-wrover-kit    # ESP32-WROVER
-pio run -e esp32-c6-devkitc-1
-pio run -e esp32dev -t upload
+pio run -t upload          # DOIT DevKit V1 (default env)
 pio device monitor
+
+# Other boards:
+pio run -e esp32-c6-devkitc-1 -t upload
+pio run -e esp32dev -t upload
+pio run -e esp-wrover-kit -t upload
 ```
 
 The official workflow remains **ESP-IDF v5.5** (`idf.py`). Avoid using both the Espressif ESP-IDF and PlatformIO extensions in the same VS Code workspace if toolchain paths conflict.
