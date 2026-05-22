@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -28,11 +28,6 @@
 #define UWORD   uint16_t
 #define UDOUBLE uint32_t
 
-// UART Configuration
-// UART 配置
-#define UART_GPS_TXD_PIN (GPIO_NUM_5)
-#define UART_GPS_RXD_PIN (GPIO_NUM_4)
-#define UART_GPS_PORT LP_UART_NUM_0
 #define RX_BUF_SIZE 800
 
 typedef struct {

@@ -26,8 +26,9 @@ Before reading this document and the code, it is recommended to first review the
 
 **Hardware**:
 
-- ESP32-C6-WROOM-1
-- LC76G GNSS Module
+- **Reference board:** ESP32-C6-WROOM-1 (ESP32-C6-DevKitC-1)
+- **Also supported (BLE remote only, no dashboard GPS):** ESP32-WROOM or ESP32-WROVER devkits — see [Supported boards](#supported-boards) below
+- **Optional:** LC76G GNSS Module (not required for connect/record)
 - DJI Osmo 360 or DJI Osmo Action 6 / 5 Pro / 4
 
 The hardware connection involves the connection between the ESP32-C6-WROOM-1 and the LC76G GNSS Module. The specific connections are as follows:
@@ -48,6 +49,32 @@ Please ensure that the pins are correctly connected, especially the TX and RX pi
 * Next, check the `.vscode/settings.json` file in the demo to ensure that the IDF-related parameters are configured correctly.
 
 * After setting up the environment, compile and flash the code to the development board. Use the monitor to view real-time logs. You can check the current device state by observing the RGB light status on the development board: red indicates uninitialized, yellow indicates BLE initialization complete, and the device is ready.
+
+### Supported boards
+
+| Board | PlatformIO env | BOOT button | Status LED |
+|-------|----------------|-------------|------------|
+| ESP32-C6-DevKitC-1 | `esp32-c6-devkitc-1` | GPIO **9** | Onboard **RGB** (GPIO 8) |
+| ESP32-WROOM devkit | `esp32dev` | GPIO **0** | Usually **GPIO 2** (single LED, on = any activity) |
+| ESP32-WROVER-KIT | `esp-wrover-kit` | GPIO **0** | Usually **GPIO 2** |
+
+WROOM/WROVER builds use the same BLE/camera logic as the C6 demo. Without an LC76G module you can still connect and control the camera; GPS/dashboard features need a GNSS module (or C6 + LC76G wiring on GPIO4/5 for C6 only).
+
+Pin map: [`main/board_pins.h`](main/board_pins.h).
+
+### PlatformIO (optional)
+
+This repo includes [`platformio.ini`](platformio.ini) for [PlatformIO](https://platformio.org/) with `framework = espidf`. Pick your board:
+
+```bash
+pio run -e esp32dev          # ESP32-WROOM
+pio run -e esp-wrover-kit    # ESP32-WROVER
+pio run -e esp32-c6-devkitc-1
+pio run -e esp32dev -t upload
+pio device monitor
+```
+
+The official workflow remains **ESP-IDF v5.5** (`idf.py`). Avoid using both the Espressif ESP-IDF and PlatformIO extensions in the same VS Code workspace if toolchain paths conflict.
 - When the BOOT button is long-pressed, the RGB LED flashes blue, indicating that it is searching for and connecting to the nearest Osmo Action device. A steady blue light indicates that BLE is connected, a steady green light indicates that the protocol is connected and commands can be sent and received, and a steady purple light indicates that the protocol is connected and GPS signal is available.
 
 - When the BOOT button is clicked, the camera starts or stops recording. During long recording sessions, the RGB LED will flash.
@@ -172,4 +199,3 @@ For a more comprehensive understanding of the demo, refer to the following docum
 ## About PR
 
 The DJI development team is dedicated to enhancing your development experience and welcomes your contributions. However, please note that PR code reviews may take some time. If you have any questions, feel free to contact us via email.
-

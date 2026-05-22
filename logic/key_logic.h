@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -23,9 +23,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-
-#define BOOT_KEY_GPIO   GPIO_NUM_9  // 假设 BOOT 按键连接到 GPIO 9
-                                    // Assume BOOT button is connected to GPIO 9
 
 // 按键事件
 // Key Events

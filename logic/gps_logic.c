@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -23,6 +23,7 @@
 #include <ctype.h>
 
 #include "gps_logic.h"
+#include "board_pins.h"
 #include "connect_logic.h"
 #include "command_logic.h"
 #include "dji_protocol_data_structures.h"
@@ -44,7 +45,7 @@ static uint8_t gps_invalid_count = 0;
 /**
  * @brief Initialize GPS data structure
  *        初始化 GPS 数据结构
- * 
+ *
  * Reset all fields in GPS data structure to initial values.
  * 将 GPS 数据结构的所有字段重置为初始值。
  */
@@ -82,7 +83,7 @@ static void init_gps_data(void) {
 /**
  * @brief Check if GPS signal is found
  *        检查 GPS 是否已找到信号
- * 
+ *
  * @return bool Returns true if consecutive invalid count is less than 10, false otherwise
  *              如果 GPS 连续无效次数小于10，返回 true；否则返回 false
  */
@@ -93,7 +94,7 @@ bool is_gps_found(void) {
 /**
  * @brief Check if current GPS data is valid
  *        检查当前 GPS 数据是否有效
- * 
+ *
  * @return bool Returns true if GPS status is valid, false otherwise
  *              如果 GPS 状态为有效，返回 true；否则返回 false
  */
@@ -117,12 +118,12 @@ static double Previous_Longitude = 0.0;
 /**
  * @brief Convert NMEA format coordinates to decimal degrees
  *        将 NMEA 格式的经纬度转换为十进制度
- * 
+ *
  * @param nmea NMEA format coordinate string
  *             NMEA 格式的经纬度字符串
  * @param direction Direction character ('N', 'S', 'E', 'W')
  *                  方向字符（'N', 'S', 'E', 'W'）
- * 
+ *
  * @return double Converted decimal degree value
  *                转换后的十进制度值
  */
@@ -181,11 +182,11 @@ double Convert_NMEA_To_Degree(const char *nmea, char direction) {
 /**
  * @brief Parse GNRMC sentence, e.g.: $GNRMC,074700.000,A,2234.732734,N,11356.317512,E,1.67,285.57,150125,,,A,V*03
  *        解析 GNRMC 语句，例如：$GNRMC,074700.000,A,2234.732734,N,11356.317512,E,1.67,285.57,150125,,,A,V*03
- * 
+ *
  * Parse GNRMC sentence to extract GPS data including time, status, latitude, longitude, speed, course, etc.
  * (There may be data accuracy issues that can be optimized as needed)
  * 解析 GNRMC 语句，提取 GPS 数据，包括时间、状态、纬度、经度、速度、航向等信息（可能存在数据不精确问题，可自行优化）。
- * 
+ *
  * @param sentence Input GNRMC sentence string
  *                 输入的 GNRMC 语句字符串
  */
@@ -287,11 +288,11 @@ void Parse_GNRMC(char *sentence) {
 /**
  * @brief Parse GNGGA sentence, e.g.: $GNGGA,074700.000,2234.732734,N,11356.317512,E,1,7,1.31,47.379,M,-2.657,M,,*65
  *        解析 GNGGA 语句，例如：$GNGGA,074700.000,2234.732734,N,11356.317512,E,1,7,1.31,47.379,M,-2.657,M,,*65
- * 
+ *
  * Parse GNGGA sentence to extract GPS data including time, latitude, longitude, number of satellites, altitude, etc.
  * (There may be data accuracy issues that can be optimized as needed)
  * 解析 GNGGA 语句，提取 GPS 数据，包括时间、纬度、经度、卫星数量、海拔高度等信息（可能存在数据不精确问题，可自行优化）。
- * 
+ *
  * @param sentence Input GNGGA sentence string
  *                 输入的 GNGGA 语句字符串
  */
@@ -360,7 +361,7 @@ void Parse_GNGGA(char *sentence) {
                 if (Previous_Time > 0.0) {
                     double current_time = GPS_Data.Hour * 3600 + GPS_Data.Minute * 60 + GPS_Data.Second;
                     double delta_time = current_time - Previous_Time;
-                    
+
                     // 处理跨天情况
                     // Handle day crossover
                     if (delta_time < -43200) {  // 如果时间差小于-12小时，说明跨天了
@@ -371,7 +372,7 @@ void Parse_GNGGA(char *sentence) {
                                                       // If time difference is more than 12 hours, it's previous day's data
                         delta_time -= 86400;
                     }
-                    
+
                     if (delta_time > 0 && delta_time < 10) {  // 只处理合理的时间差（比如小于10秒）
                                                               // Only process reasonable time differences (e.g., less than 10 seconds)
                         double delta_altitude = GPS_Data.Altitude - Previous_Altitude;
@@ -399,10 +400,10 @@ void Parse_GNGGA(char *sentence) {
 /**
  * @brief 解析 NMEA 缓冲区中的所有语句
  *        Parse all sentences in NMEA buffer
- * 
+ *
  * 遍历缓冲区中的每一行，识别并解析 GNRMC 和 GNGGA 语句。
  * Traverse each line in the buffer, identify and parse GNRMC and GNGGA sentences.
- * 
+ *
  * @param buffer 包含 NMEA 语句的缓冲区
  *               Buffer containing NMEA sentences
  */
@@ -484,12 +485,12 @@ void Parse_NMEA_Buffer(char *buffer) {
 /**
  * @brief 打印当前的 GPS 数据
  *        Print current GPS data
- * 
+ *
  * 将当前的 GPS 数据以日志的形式输出。
  * Output current GPS data in log format.
  */
 void print_gps_data() {
-    ESP_LOGI(TAG, 
+    ESP_LOGI(TAG,
         "GPS Data: Time=%02d:%02d:%06.3f, Date=%02d-%02d-20%02d, "
         "Lat=%f %c, Lon=%f %c, Speed=%.2f knots, Course=%.2f deg, "
         "Altitude=%.2f m, Satellites=%d, V_North=%.2f m/s, V_East=%.2f m/s, V_Descend=%.2f m/s",
@@ -507,7 +508,7 @@ void print_gps_data() {
 /**
  * @brief 推送 GPS 数据到相机
  *        Push GPS data to camera
- * 
+ *
  * 将当前的 GPS 数据转换为指定格式，并通过命令逻辑推送到相机。
  * Convert current GPS data to specified format and push to camera through command logic.
  */
@@ -583,7 +584,7 @@ void gps_push_data() {
 /**
  * @brief 初始化 GPS UART
  *        Initialize GPS UART
- * 
+ *
  * 配置并初始化 GPS UART，用于接收 GPS 数据。
  * Configure and initialize GPS UART for receiving GPS data.
  */
@@ -595,22 +596,23 @@ static void initUartGps(void)
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .rx_flow_ctrl_thresh = 0,               //LP UART
-        .source_clk = LP_UART_SCLK_DEFAULT,     //LP UART
+        .rx_flow_ctrl_thresh = 0,
+#if CONFIG_IDF_TARGET_ESP32C6
+        .source_clk = LP_UART_SCLK_DEFAULT,
+#endif
     };
-    // We won't use a buffer for sending data.
-    uart_driver_install(UART_GPS_PORT, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
-    uart_param_config(UART_GPS_PORT, &uart_config);
-    uart_set_pin(UART_GPS_PORT, UART_GPS_TXD_PIN, UART_GPS_RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_driver_install(BOARD_GPS_UART_PORT, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
+    uart_param_config(BOARD_GPS_UART_PORT, &uart_config);
+    uart_set_pin(BOARD_GPS_UART_PORT, BOARD_GPS_TXD_PIN, BOARD_GPS_RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 
 /**
  * @brief GPS 数据接收任务
  *        GPS data receiving task
- * 
+ *
  * 从 GPS UART 端口读取数据，解析并处理 NMEA 数据。
  * Read data from GPS UART port, parse and process NMEA data.
- * 
+ *
  * @param arg 任务参数
  *            Task parameters
  */
@@ -620,7 +622,7 @@ static void rx_task_GPS(void *arg)
     uint8_t* data = (uint8_t*) malloc(RX_BUF_SIZE + 1);
 
     while (1) {
-        const int rxBytes = uart_read_bytes(UART_GPS_PORT, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
+        const int rxBytes = uart_read_bytes(BOARD_GPS_UART_PORT, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
         if (rxBytes > 0) {
             // 给看门狗喂狗的机会
             // Give watchdog a chance to reset
@@ -663,7 +665,7 @@ static void rx_task_GPS(void *arg)
 /**
  * @brief 初始化并启动 GPS 数据接收任务
  *        Initialize and start GPS data receiving task
- * 
+ *
  * 初始化 GPS UART 和相关任务，以定期接收 GPS 数据。
  * Initialize GPS UART and related tasks to periodically receive GPS data.
  */
@@ -677,8 +679,8 @@ void initSendGpsDataToCameraTask(void) {
     // "$PAIR050,100*22\r\n" for 10Hz update rate
     char* gps_command = "$PAIR050,100*22\r\n";  // （>1Hz 仅 RMC 和 GGA 支持）
                                                 // (>1Hz only RMC and GGA supported)
-    uart_write_bytes(UART_GPS_PORT, gps_command, strlen(gps_command));
-    
+    uart_write_bytes(BOARD_GPS_UART_PORT, gps_command, strlen(gps_command));
+
     xTaskCreate(rx_task_GPS, "uart_rx_task_GPS", 1024 * 4, NULL, 0, NULL);
     ESP_LOGI(TAG, "uart_rx_task_GPS are running\n");
 }

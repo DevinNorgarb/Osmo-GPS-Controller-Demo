@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -19,6 +19,7 @@
 
 #include <time.h>
 #include "key_logic.h"
+#include "board_pins.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 
@@ -54,7 +55,7 @@ static TickType_t key_press_start_time = 0;
 /**
  * @brief 处理长按事件
  *        Handle long press event
- * 
+ *
  * 当按键被长时间按下时（超过长按阈值），执行相关的逻辑操作：
  * When the key is pressed for a long time (exceeding the threshold), execute the following operations:
  * 1. 初始化数据层。
@@ -71,7 +72,7 @@ static void handle_boot_long_press() {
     /* Initialize data layer */
     if (!is_data_layer_initialized()) {
         ESP_LOGI(TAG, "Data layer not initialized, initializing now...");
-        data_init(); 
+        data_init();
         data_register_status_update_callback(update_camera_state_handler);
         data_register_new_status_update_callback(update_new_camera_state_handler);
         if (!is_data_layer_initialized()) {
@@ -150,7 +151,7 @@ static void handle_boot_long_press() {
 /**
  * @brief 处理单击事件
  *        Handle single press event
- * 
+ *
  * 当按键被单击时，执行以下操作：
  * When the key is single pressed, perform the following operations:
  * 1. 获取当前相机模式。
@@ -227,7 +228,7 @@ static void handle_boot_single_press() {
 /**
  * @brief 按键扫描任务
  *        Key scan task
- * 
+ *
  * 定期检查按键状态，检测单击和长按事件，并触发相应的操作：
  * Periodically check key status, detect single press and long press events, and trigger corresponding operations:
  * - 长按：进行蓝牙断开、重连、相机协议连接等操作。
@@ -239,7 +240,7 @@ static void key_scan_task(void *arg) {
     while (1) {
         // 获取按键状态
         // Get key state
-        bool new_key_state = gpio_get_level(BOOT_KEY_GPIO);
+        bool new_key_state = gpio_get_level(BOARD_BOOT_KEY_GPIO);
 
         if (new_key_state == 0 && !key_pressed) { // 按键按下 / Key pressed
             key_pressed = true;
@@ -281,7 +282,7 @@ static void key_scan_task(void *arg) {
 /**
  * @brief 初始化按键逻辑
  *        Initialize key logic
- * 
+ *
  * 配置按键的 GPIO 引脚，并启动按键扫描任务。
  * Configure GPIO pin for key and start key scan task.
  */
@@ -289,7 +290,7 @@ void key_logic_init(void) {
     // 配置引脚为输入
     // Configure pin as input
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << BOOT_KEY_GPIO),
+        .pin_bit_mask = (1ULL << BOARD_BOOT_KEY_GPIO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
@@ -304,10 +305,10 @@ void key_logic_init(void) {
 /**
  * @brief 获取当前按键事件
  *        Get current key event
- * 
+ *
  * 获取并重置当前的按键事件，主要用于外部任务获取事件后进行处理。
  * Get and reset current key event, mainly used for external tasks to process after getting the event.
- * 
+ *
  * @return key_event_t 当前按键事件类型 / Current key event type
  */
 key_event_t key_logic_get_event(void) {
