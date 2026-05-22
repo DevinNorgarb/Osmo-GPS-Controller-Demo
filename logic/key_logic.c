@@ -52,6 +52,12 @@ static TickType_t key_press_start_time = 0;
 // Time interval for detecting single press and long press events (e.g., 50ms)
 #define KEY_SCAN_INTERVAL pdMS_TO_TICKS(50)
 
+/* key_scan_task only polls GPIO; BLE/protocol work needs a deeper stack on ESP32 */
+#define KEY_SCAN_TASK_STACK      2048
+#define KEY_CONNECT_TASK_STACK   8192
+
+static TaskHandle_t s_connect_task_handle = NULL;
+
 /**
  * @brief 处理长按事件
  *        Handle long press event
@@ -225,6 +231,31 @@ static void handle_boot_single_press() {
     // }
 }
 
+static void key_connect_worker_task(void *arg) {
+    (void)arg;
+    handle_boot_long_press();
+    s_connect_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+static void schedule_boot_long_press(void) {
+    if (s_connect_task_handle != NULL) {
+        ESP_LOGW(TAG, "Connect already in progress, ignoring long press");
+        return;
+    }
+    BaseType_t ok = xTaskCreate(
+        key_connect_worker_task,
+        "key_connect",
+        KEY_CONNECT_TASK_STACK,
+        NULL,
+        2,
+        &s_connect_task_handle);
+    if (ok != pdPASS) {
+        s_connect_task_handle = NULL;
+        ESP_LOGE(TAG, "Failed to start connect task (stack %d)", KEY_CONNECT_TASK_STACK);
+    }
+}
+
 /**
  * @brief 按键扫描任务
  *        Key scan task
@@ -254,9 +285,7 @@ static void key_scan_task(void *arg) {
                 // 长按事件（持续按下达到阈值时立即触发）
                 // Long press event (triggered immediately when threshold is reached)
                 current_key_event = KEY_EVENT_LONG_PRESS;
-                // 处理长按事件：首先断开当前蓝牙连接，然后尝试重新连接
-                // Handle long press event: first disconnect current Bluetooth connection, then try to reconnect
-                handle_boot_long_press();
+                schedule_boot_long_press();
                 // ESP_LOGI(TAG, "Long press detected. Duration: %lu ticks", press_duration);
             }
         } else if (new_key_state == 1 && key_pressed) { // 按键松开 / Key released
@@ -292,14 +321,13 @@ void key_logic_init(void) {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << BOARD_BOOT_KEY_GPIO),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&io_conf);
 
-    // 启动按键扫描任务
-    // Start key scan task
-    xTaskCreate(key_scan_task, "key_scan_task", 2048, NULL, 2, NULL);
+    xTaskCreate(key_scan_task, "key_scan_task", KEY_SCAN_TASK_STACK, NULL, 2, NULL);
 }
 
 /**
