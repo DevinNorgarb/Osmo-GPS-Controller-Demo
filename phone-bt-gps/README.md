@@ -96,14 +96,14 @@ $GPGGA,074700.000,2234.732734,N,11356.317512,E,1,8,1.0,47.379,M,0.0,M,,*XX
 
 - **Android only** (no iOS Classic SPP in this stack).
 - **Browser / `npm run dev`** — UI only; BT write requires native build.
-- **1 Hz** stream interval (configurable in `src/services/gpsStream.ts`).
-- Phone GPS accuracy/heading depend on device sensors; satellite count is a fixed placeholder (`8`) for GGA.
+- **10 Hz** stream target (100 ms interval in `src/services/gpsStream.ts`; actual rate depends on the phone GNSS).
+- Phone GPS accuracy/heading depend on device sensors; satellite count is estimated from horizontal accuracy when the OS does not expose a count.
 
 ## Project layout
 
 | Path | Role |
 |------|------|
-| `src/utils/nmea.ts` | RMC/GGA builders + checksum |
+| `src/utils/nmea.ts` | RMC/GGA/GST builders + checksum |
 | `src/services/bluetooth.ts` | Pair list, connect, write |
-| `src/services/gpsStream.ts` | Geolocation @ 1 Hz → NMEA |
+| `src/services/gpsStream.ts` | Geolocation @ 10 Hz → NMEA |
 | `src/views/HomePage.vue` | Single-page UI |

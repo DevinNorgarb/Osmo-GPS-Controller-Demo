@@ -1,5 +1,12 @@
 menu "Example Configuration"
 
+    config LILYGO_LILY_PI
+        bool "LilyGO Lily Pi board (3.5\" ST7796 display)"
+        default n
+        help
+            Enable 480x320 SPI display, PSRAM, and backlight status on GPIO12.
+            Set via sdkconfig.lilygo-lily-pi.defaults for PlatformIO env lilygo-lily-pi.
+
     config EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
         bool "Dump whole adv data and scan response data in example"
         default n

@@ -20,6 +20,7 @@
 #include "freertos/FreeRTOS.h"
 
 #include "connect_logic.h"
+#include "display_logic.h"
 #include "gps_logic.h"
 #include "key_logic.h"
 #include "light_logic.h"
@@ -42,6 +43,11 @@ void app_main(void) {
     /* Initialize RGB light */
     /* 初始化氛围灯 */
     res = init_light_logic();
+    if (res != 0) {
+        return;
+    }
+
+    res = display_logic_init();
     if (res != 0) {
         return;
     }

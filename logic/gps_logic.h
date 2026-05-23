@@ -91,6 +91,12 @@ typedef struct {
                              // GGA 的纬度
     double GGA_Longitude;    // Longitude from GGA
                              // GGA 的经度
+
+    // DJI 0x0017 accuracy estimates (from GPGST / GGA HDOP)
+    uint32_t Horizontal_Accuracy_mm;
+    uint32_t Vertical_Accuracy_mm;
+    uint32_t Speed_Accuracy_cms;
+    uint8_t GST_Valid;
 } GPS_Data_t;
 
 void initSendGpsDataToCameraTask(void);

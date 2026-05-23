@@ -7,12 +7,13 @@ export interface GpsFix {
   speedMps: number | null;
   headingDegrees: number | null;
   accuracyMeters: number | null;
+  altitudeAccuracyMeters: number | null;
   satelliteCount: number;
   timestamp: Date;
 }
 
 const NMEA_SAT_COUNT = 8;
-const NMEA_HDOP = '1.0';
+const HDOP_PER_ACCURACY_M = 5;
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -64,6 +65,39 @@ function finalizeSentence(body: string): string {
   return `$${body}*${checksum}`;
 }
 
+/** Horizontal accuracy (m) → HDOP for GGA field 8 (firmware fallback). */
+export function accuracyToHdop(accuracyMeters: number | null): string {
+  if (accuracyMeters == null || !Number.isFinite(accuracyMeters) || accuracyMeters <= 0) {
+    return '1.0';
+  }
+  const hdop = accuracyMeters / HDOP_PER_ACCURACY_M;
+  return Math.min(99.9, Math.max(0.5, hdop)).toFixed(1);
+}
+
+/** Estimate visible satellites from horizontal accuracy when OS does not expose count. */
+export function estimateSatelliteCount(accuracyMeters: number | null, hasFix: boolean): number {
+  if (!hasFix) {
+    return 0;
+  }
+  if (accuracyMeters == null || !Number.isFinite(accuracyMeters)) {
+    return NMEA_SAT_COUNT;
+  }
+  if (accuracyMeters <= 5) {
+    return 12;
+  }
+  if (accuracyMeters <= 15) {
+    return 10;
+  }
+  return NMEA_SAT_COUNT;
+}
+
+function sigmaMeters(value: number | null, fallback: number): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    return fallback.toFixed(2);
+  }
+  return Math.min(99.99, value).toFixed(2);
+}
+
 /** Speed m/s → knots for RMC field 8 */
 function mpsToKnots(mps: number | null): string {
   if (mps == null || Number.isNaN(mps) || mps < 0) {
@@ -108,14 +142,33 @@ export function buildGga(fix: GpsFix, hasFix: boolean): string {
   const lonInd = lonIndicator(fix.longitude);
   const quality = hasFix ? '1' : '0';
   const sats = String(fix.satelliteCount || NMEA_SAT_COUNT);
+  const hdop = accuracyToHdop(fix.accuracyMeters);
   const alt = fix.altitudeMeters.toFixed(3);
-  const body = `GPGGA,${t},${lat},${latInd},${lon},${lonInd},${quality},${sats},${NMEA_HDOP},${alt},M,0.0,M,,`;
+  const body = `GPGGA,${t},${lat},${latInd},${lon},${lonInd},${quality},${sats},${hdop},${alt},M,0.0,M,,`;
   return finalizeSentence(body);
 }
 
-/** RMC + GGA lines terminated with CRLF (UART / HC-05 convention). */
+/**
+ * $GPGST — std-dev errors (m) for lat/lon/alt; firmware maps to DJI 0x0017 accuracy fields.
+ */
+export function buildGst(fix: GpsFix, hasFix: boolean): string {
+  const t = formatTimeUtc(fix.timestamp);
+  if (!hasFix) {
+    const body = `GPGST,${t},0.00,0.00,0.00,0.00,0.00,0.00,0.00`;
+    return finalizeSentence(body);
+  }
+  const horiz = fix.accuracyMeters ?? 10;
+  const latSigma = sigmaMeters(fix.accuracyMeters, horiz);
+  const lonSigma = sigmaMeters(fix.accuracyMeters, horiz);
+  const altSigma = sigmaMeters(fix.altitudeAccuracyMeters, horiz * 1.5);
+  const body = `GPGST,${t},0.00,0.00,0.00,0.00,${latSigma},${lonSigma},${altSigma}`;
+  return finalizeSentence(body);
+}
+
+/** RMC + GGA + GST lines terminated with CRLF (UART / HC-05 convention). */
 export function buildNmeaBlock(fix: GpsFix, hasFix: boolean): string {
   const rmc = buildRmc(fix, hasFix);
   const gga = buildGga(fix, hasFix);
-  return `${rmc}\r\n${gga}\r\n`;
+  const gst = buildGst(fix, hasFix);
+  return `${rmc}\r\n${gga}\r\n${gst}\r\n`;
 }

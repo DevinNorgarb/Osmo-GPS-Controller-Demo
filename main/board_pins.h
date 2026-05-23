@@ -8,7 +8,19 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 
-#if CONFIG_IDF_TARGET_ESP32C6
+#if CONFIG_LILYGO_LILY_PI
+
+/* LilyGO Lily Pi: BOOT=0, TFT backlight=12, GPS UART2=16/17 (no conflict with TFT SPI) */
+#define BOARD_BOOT_KEY_GPIO   GPIO_NUM_0
+#define BOARD_LED_GPIO        GPIO_NUM_12
+#define BOARD_HAS_RGB_LED     0
+#define BOARD_LED_ACTIVE_LOW  0
+#define BOARD_LED_IS_BACKLIGHT 1
+#define BOARD_GPS_UART_PORT   UART_NUM_2
+#define BOARD_GPS_TXD_PIN     GPIO_NUM_17
+#define BOARD_GPS_RXD_PIN     GPIO_NUM_16
+
+#elif CONFIG_IDF_TARGET_ESP32C6
 
 #define BOARD_BOOT_KEY_GPIO   GPIO_NUM_9
 #define BOARD_LED_GPIO        8

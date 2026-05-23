@@ -8,6 +8,7 @@
 ## Learned Workspace Facts
 
 - Default PlatformIO env is `esp32doit-devkit-v1` (DOIT ESP32 DevKit V1, `BOARD_DOIT_ESP32_DEVKIT_V1`).
+- LilyGO Lily Pi: PlatformIO env `lilygo-lily-pi` (`CONFIG_LILYGO_LILY_PI`, `sdkconfig.lilygo-lily-pi`); ST7796 480×320 on SPI (MOSI 19, SCLK 18, CS 5, DC 27, BL 12); status UI via LVGL; GPS UART2 still 16/17.
 - DOIT pins: BOOT GPIO0 (internal pull-up), status LED GPIO2 active-low; optional GPS UART2 RX=GPIO16, TX=GPIO17 @ 115200 8N1.
 - Phone→ESP32 GPS wiring: HC TXD→GPIO16 (RX2), HC RXD→GPIO17 (TX2), GND common; HC VCC→ESP32 5V when module power spec is 3.6–6 V (UART is 3.3 V logic).
 - Long-press BOOT connect runs in `key_connect` worker; single-press record/stop runs in `key_record` worker—both use 8192-word stacks, not `key_scan_task` (2048 overflows on BLE/protocol work).

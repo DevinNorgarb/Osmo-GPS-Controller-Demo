@@ -78,6 +78,11 @@ static void init_gps_data(void) {
     GPS_Data.RMC_Longitude = 0.0;
     GPS_Data.GGA_Latitude = 0.0;
     GPS_Data.GGA_Longitude = 0.0;
+
+    GPS_Data.Horizontal_Accuracy_mm = 0;
+    GPS_Data.Vertical_Accuracy_mm = 0;
+    GPS_Data.Speed_Accuracy_cms = 0;
+    GPS_Data.GST_Valid = 0;
 }
 
 /**
@@ -348,10 +353,15 @@ void Parse_GNGGA(char *sentence) {
                 // Number of satellites in view
                 GPS_Data.Num_Satellites = (uint8_t) atoi(token);
                 break;
-            case 9:
-                // HDOP，可根据需要解析
-                // HDOP, can be parsed if needed
+            case 9: {
+                // HDOP → horizontal/vertical accuracy fallback when GPGST absent
+                double hdop = atof(token);
+                if (hdop > 0.0 && !GPS_Data.GST_Valid) {
+                    GPS_Data.Horizontal_Accuracy_mm = (uint32_t)(hdop * 5000.0);
+                    GPS_Data.Vertical_Accuracy_mm = (uint32_t)(hdop * 7500.0);
+                }
                 break;
+            }
             case 10:
                 // 海拔高度 (米)
                 // Altitude (meters)
@@ -398,11 +408,83 @@ void Parse_GNGGA(char *sentence) {
 }
 
 /**
+ * @brief Parse GPGST sentence for position error std-dev (meters).
+ *        解析 GPGST 语句，提取经纬度/高度标准差（米）。
+ */
+void Parse_GPGST(char *sentence) {
+    char *token = strtok(sentence, ",");
+    int field = 0;
+    uint32_t lat_mm = 0;
+    uint32_t lon_mm = 0;
+    uint32_t alt_mm = 0;
+
+    GPS_Data.GST_Valid = 0;
+
+    while (token != NULL) {
+        field++;
+        switch (field) {
+            case 6:
+                if (token[0] != '\0') {
+                    double m = atof(token);
+                    if (m > 0.0) {
+                        lat_mm = (uint32_t)(m * 1000.0);
+                    }
+                }
+                break;
+            case 7:
+                if (token[0] != '\0') {
+                    double m = atof(token);
+                    if (m > 0.0) {
+                        lon_mm = (uint32_t)(m * 1000.0);
+                    }
+                }
+                break;
+            case 8:
+                if (token[0] != '\0') {
+                    double m = atof(token);
+                    if (m > 0.0) {
+                        alt_mm = (uint32_t)(m * 1000.0);
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        token = strtok(NULL, ",");
+    }
+
+    if (lat_mm > 0 || lon_mm > 0) {
+        GPS_Data.Horizontal_Accuracy_mm = lat_mm > lon_mm ? lat_mm : lon_mm;
+        GPS_Data.GST_Valid = 1;
+        GPS_Data.Speed_Accuracy_cms = GPS_Data.Horizontal_Accuracy_mm / 100;
+        if (GPS_Data.Speed_Accuracy_cms < 10) {
+            GPS_Data.Speed_Accuracy_cms = 10;
+        } else if (GPS_Data.Speed_Accuracy_cms > 500) {
+            GPS_Data.Speed_Accuracy_cms = 500;
+        }
+    }
+    if (alt_mm > 0) {
+        GPS_Data.Vertical_Accuracy_mm = alt_mm;
+        GPS_Data.GST_Valid = 1;
+    }
+}
+
+static void parse_nmea_line(char *line) {
+    if (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) {
+        Parse_GNRMC(line);
+    } else if (strncmp(line, "$GNGGA", 6) == 0 || strncmp(line, "$GPGGA", 6) == 0) {
+        Parse_GNGGA(line);
+    } else if (strncmp(line, "$GNGST", 6) == 0 || strncmp(line, "$GPGST", 6) == 0) {
+        Parse_GPGST(line);
+    }
+}
+
+/**
  * @brief 解析 NMEA 缓冲区中的所有语句
  *        Parse all sentences in NMEA buffer
  *
- * 遍历缓冲区中的每一行，识别并解析 GNRMC 和 GNGGA 语句。
- * Traverse each line in the buffer, identify and parse GNRMC and GNGGA sentences.
+ * 遍历缓冲区中的每一行，识别并解析 GNRMC、GNGGA、GPGST 语句。
+ * Traverse each line in the buffer, identify and parse GNRMC, GNGGA, and GPGST sentences.
  *
  * @param buffer 包含 NMEA 语句的缓冲区
  *               Buffer containing NMEA sentences
@@ -427,13 +509,7 @@ void Parse_NMEA_Buffer(char *buffer) {
             line[line_length] = '\0'; // 确保以空字符结尾
                                       // Ensure null-terminated string
 
-            // 解析该行
-            // Parse the line
-            if (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) {
-                Parse_GNRMC(line);
-            } else if (strncmp(line, "$GNGGA", 6) == 0 || strncmp(line, "$GPGGA", 6) == 0) {
-                Parse_GNGGA(line);
-            }
+            parse_nmea_line(line);
         }
 
         start = end + 1; // 移动到下一行的开始
@@ -443,11 +519,7 @@ void Parse_NMEA_Buffer(char *buffer) {
     // 处理最后一行（如果没有以换行符结尾）
     // Process the last line (if not ending with newline)
     if (*start != '\0') {
-        if (strncmp(start, "$GNRMC", 6) == 0 || strncmp(start, "$GPRMC", 6) == 0) {
-            Parse_GNRMC(start);
-        } else if (strncmp(start, "$GNGGA", 6) == 0 || strncmp(start, "$GPGGA", 6) == 0) {
-            Parse_GNGGA(start);
-        }
+        parse_nmea_line(start);
     }
 
     // 在所有语句解析完成后，更新最终状态和位置数据
@@ -512,6 +584,27 @@ void print_gps_data() {
  * 将当前的 GPS 数据转换为指定格式，并通过命令逻辑推送到相机。
  * Convert current GPS data to specified format and push to camera through command logic.
  */
+static uint32_t gps_push_horizontal_accuracy_mm(void) {
+    if (GPS_Data.Horizontal_Accuracy_mm > 0) {
+        return GPS_Data.Horizontal_Accuracy_mm;
+    }
+    return 1000;
+}
+
+static uint32_t gps_push_vertical_accuracy_mm(void) {
+    if (GPS_Data.Vertical_Accuracy_mm > 0) {
+        return GPS_Data.Vertical_Accuracy_mm;
+    }
+    return 1000;
+}
+
+static uint32_t gps_push_speed_accuracy_cms(void) {
+    if (GPS_Data.Speed_Accuracy_cms > 0) {
+        return GPS_Data.Speed_Accuracy_cms;
+    }
+    return 10;
+}
+
 void gps_push_data() {
     // 时间转换
     // Time conversion
@@ -564,12 +657,9 @@ void gps_push_data() {
         .speed_to_north = speed_to_north,
         .speed_to_east = speed_to_east,
         .speed_to_wnward = speed_to_wnward,
-        .vertical_accuracy = 1000,    // 垂直默认精度为 1000 mm
-                                      // Default vertical accuracy is 1000 mm
-        .horizontal_accuracy = 1000,  // 水平精度为 1000 mm
-                                      // Horizontal accuracy is 1000 mm
-        .speed_accuracy = 10,         // 速度精度为 10 cm/s
-                                      // Speed accuracy is 10 cm/s
+        .vertical_accuracy = gps_push_vertical_accuracy_mm(),
+        .horizontal_accuracy = gps_push_horizontal_accuracy_mm(),
+        .speed_accuracy = gps_push_speed_accuracy_cms(),
         .satellite_number = satellite_number
     };
 
