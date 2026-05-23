@@ -7,7 +7,8 @@ import {
 } from '@/protocol/payloads';
 import { CmdType, type RemoteIdentity } from '@/protocol/types';
 
-export type FrameHandler = (frame: ReturnType<typeof parseFrame>) => void;
+export type ParsedFrame = NonNullable<ReturnType<typeof parseFrame>>;
+export type FrameHandler = (frame: ParsedFrame) => void;
 
 let seqCounter = 0;
 
@@ -43,7 +44,7 @@ function waitForFrame(
   cmdId: number,
   timeoutMs: number,
   subscribe: (handler: FrameHandler) => () => void,
-): Promise<ReturnType<typeof parseFrame>> {
+): Promise<ParsedFrame> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       unsubscribe();
@@ -51,7 +52,7 @@ function waitForFrame(
     }, timeoutMs);
 
     const unsubscribe = subscribe((frame) => {
-      if (!frame || frame.cmdSet !== cmdSet || frame.cmdId !== cmdId) {
+      if (frame.cmdSet !== cmdSet || frame.cmdId !== cmdId) {
         return;
       }
       clearTimeout(timer);
@@ -59,6 +60,22 @@ function waitForFrame(
       resolve(frame);
     });
   });
+}
+
+async function handleCameraConnectionCommand(
+  frame: ParsedFrame,
+  identity: RemoteIdentity,
+  writeFrame: (frame: Uint8Array) => Promise<void>,
+): Promise<void> {
+  const cmd = parseConnectionCommand(frame.data);
+  if (!cmd || cmd.verifyMode !== 2) {
+    throw new Error(`Unexpected verify_mode from camera: ${cmd?.verifyMode ?? '?'}`);
+  }
+  if (cmd.verifyData !== 0) {
+    throw new Error('Camera rejected connection');
+  }
+  const ack = buildConnectionResponseFrame(identity, frame.seq, 0);
+  await writeFrame(ack);
 }
 
 /**
@@ -70,50 +87,28 @@ export async function runProtocolConnect(
   subscribeFrames: (handler: FrameHandler) => () => void,
 ): Promise<void> {
   const reqSeq = nextSeq();
-  const reqFrame = buildConnectionRequestFrame(identity, reqSeq);
-  await writeFrame(reqFrame);
+  await writeFrame(buildConnectionRequestFrame(identity, reqSeq));
 
-  let skippedImmediateResponse = false;
-
+  let immediate: ParsedFrame;
   try {
-    const immediate = await waitForFrame(0x00, 0x19, 1000, subscribeFrames);
-    const isCommand = (immediate.cmdType & 0x20) === 0;
-    if (isCommand) {
-      const cmd = parseConnectionCommand(immediate.data);
-      if (!cmd || cmd.verifyMode !== 2) {
-        throw new Error('Unexpected camera connection command (expected verify_mode=2)');
-      }
-      if (cmd.verifyData !== 0) {
-        throw new Error('Camera rejected connection');
-      }
-      const ack = buildConnectionResponseFrame(identity, immediate.seq, 0);
-      await writeFrame(ack);
-      return;
-    }
-
-    const resp = parseConnectionResponse(immediate.data);
-    if (!resp || resp.retCode !== 0) {
-      throw new Error(`Connection handshake failed (ret_code=${resp?.retCode ?? '?'})`);
-    }
-    skippedImmediateResponse = true;
-  } catch (e) {
-    if (!(e instanceof Error) || !e.message.startsWith('Timeout')) {
-      throw e;
-    }
+    immediate = await waitForFrame(0x00, 0x19, 1000, subscribeFrames);
+  } catch {
+    throw new Error('No response to connection request (timeout)');
   }
 
-  if (skippedImmediateResponse) {
-    const cameraCmd = await waitForFrame(0x00, 0x19, 30000, subscribeFrames);
-    const cmd = parseConnectionCommand(cameraCmd.data);
-    if (!cmd || cmd.verifyMode !== 2) {
-      throw new Error(`Unexpected verify_mode from camera: ${cmd?.verifyMode}`);
-    }
-    if (cmd.verifyData !== 0) {
-      throw new Error('Camera rejected connection');
-    }
-    const ack = buildConnectionResponseFrame(identity, cameraCmd.seq, 0);
-    await writeFrame(ack);
+  const isCommand = (immediate.cmdType & 0x20) === 0;
+  if (isCommand) {
+    await handleCameraConnectionCommand(immediate, identity, writeFrame);
+    return;
   }
+
+  const resp = parseConnectionResponse(immediate.data);
+  if (!resp || resp.retCode !== 0) {
+    throw new Error(`Connection handshake failed (ret_code=${resp?.retCode ?? '?'})`);
+  }
+
+  const cameraCmd = await waitForFrame(0x00, 0x19, 30000, subscribeFrames);
+  await handleCameraConnectionCommand(cameraCmd, identity, writeFrame);
 }
 
 /** Feed raw notify bytes into frame handlers. */

@@ -68,6 +68,10 @@ function emitFrames(chunk: Uint8Array): void {
   });
 }
 
+function dataViewToBytes(dv: DataView): Uint8Array {
+  return new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+}
+
 /** Manufacturer bytes 0=0xAA, 1=0x08, 4=0xFA — ble.c bsp_link_is_dji_camera_adv */
 export function isDjiCameraAdvertisement(result: ScanResult): boolean {
   const mfg = result.manufacturerData;
@@ -75,21 +79,16 @@ export function isDjiCameraAdvertisement(result: ScanResult): boolean {
     return false;
   }
   for (const key of Object.keys(mfg)) {
-    const bytes = hexToBytes(mfg[key]!);
+    const raw = mfg[key];
+    if (!raw) {
+      continue;
+    }
+    const bytes = raw instanceof DataView ? dataViewToBytes(raw) : new Uint8Array(raw as ArrayBuffer);
     if (bytes.length >= 5 && bytes[0] === 0xaa && bytes[1] === 0x08 && bytes[4] === 0xfa) {
       return true;
     }
   }
   return false;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const normalized = hex.replace(/[^0-9a-fA-F]/g, '');
-  const out = new Uint8Array(normalized.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(normalized.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
 }
 
 export async function initializeBle(): Promise<void> {
@@ -104,9 +103,9 @@ export async function initializeBle(): Promise<void> {
 
 export async function requestBlePermissions(): Promise<void> {
   await initializeBle();
-  const granted = await BleClient.requestEnable();
-  if (!granted) {
-    throw new Error('Bluetooth is disabled. Enable Bluetooth and try again.');
+  const enabled = await BleClient.isEnabled();
+  if (!enabled) {
+    await BleClient.requestEnable();
   }
 }
 
@@ -118,11 +117,7 @@ export async function startDjiScan(
   scanListener = onDevices;
   setState('scanning');
 
-  await BleClient.requestLEScan(
-    { allowDuplicates: true },
-  );
-
-  await BleClient.addListener('onScanResult', (result: ScanResult) => {
+  await BleClient.requestLEScan({ allowDuplicates: true }, (result: ScanResult) => {
     if (!isDjiCameraAdvertisement(result)) {
       return;
     }
@@ -140,7 +135,6 @@ export async function startDjiScan(
 export async function stopDjiScan(): Promise<void> {
   try {
     await BleClient.stopLEScan();
-    await BleClient.removeAllListeners();
   } catch {
     // ignore
   }
@@ -149,16 +143,21 @@ export async function stopDjiScan(): Promise<void> {
   }
 }
 
-async function writeFrame(frame: Uint8Array): Promise<void> {
+async function writeFrame(frame: Uint8Array, withoutResponse = false): Promise<void> {
   if (!connectedDeviceId) {
     throw new Error('Not connected');
   }
-  await BleClient.write(
-    connectedDeviceId,
-    DJI_SERVICE_UUID,
-    DJI_WRITE_UUID,
-    new DataView(frame.buffer, frame.byteOffset, frame.byteLength),
-  );
+  const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+  if (withoutResponse) {
+    await BleClient.writeWithoutResponse(
+      connectedDeviceId,
+      DJI_SERVICE_UUID,
+      DJI_WRITE_UUID,
+      view,
+    );
+  } else {
+    await BleClient.write(connectedDeviceId, DJI_SERVICE_UUID, DJI_WRITE_UUID, view);
+  }
 }
 
 export async function connectDjiCamera(
@@ -173,7 +172,7 @@ export async function connectDjiCamera(
     ...identity,
     verifyData:
       identity.verifyMode === 1
-        ? (identity.verifyData || (Math.floor(Math.random() * 10000) & 0xffff))
+        ? identity.verifyData || (Math.floor(Math.random() * 10000) & 0xffff)
         : identity.verifyData,
   };
 
@@ -183,6 +182,7 @@ export async function connectDjiCamera(
   });
 
   connectedDeviceId = device.deviceId;
+  await BleClient.discoverServices(device.deviceId);
   setState('ble_connected');
 
   await BleClient.startNotifications(
@@ -190,11 +190,15 @@ export async function connectDjiCamera(
     DJI_SERVICE_UUID,
     DJI_NOTIFY_UUID,
     (value) => {
-      emitFrames(new Uint8Array(value.buffer));
+      emitFrames(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
     },
   );
 
-  await runProtocolConnect(pairingIdentity, writeFrame, subscribeFrames);
+  await runProtocolConnect(
+    pairingIdentity,
+    (f) => writeFrame(f, false),
+    subscribeFrames,
+  );
   setState('protocol_connected');
 }
 
@@ -213,8 +217,8 @@ export async function disconnectDjiCamera(): Promise<void> {
   setState('idle');
 }
 
-export async function writeRawFrame(frame: Uint8Array): Promise<void> {
-  await writeFrame(frame);
+export async function writeRawFrame(frame: Uint8Array, withoutResponse = true): Promise<void> {
+  await writeFrame(frame, withoutResponse);
 }
 
 export function getConnectedDeviceId(): string | null {

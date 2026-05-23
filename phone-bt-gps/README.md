@@ -2,29 +2,43 @@
 
 This directory is a **sibling project** to the ESP32 firmware in this repository (PlatformIO / ESP-IDF under `main/`, `logic/`, and related folders at the repo root).
 
-Minimal **Vue 3 + Ionic 8 + Capacitor 8** app that streams the phone’s GPS as **NMEA 0183** over **Bluetooth Classic SPP** to an **HC-05 / HC-06** module wired to the ESP32 UART on the [Osmo GPS Controller Demo](../README.md).
+**Vue 3 + Ionic 8 + Capacitor 8** app with two ways to get phone GPS to the Osmo stack:
 
-**Android only** — HC-05 uses Classic Bluetooth, not BLE.
+| Mode | Transport | Target | Protocol |
+|------|-----------|--------|----------|
+| **Camera (BLE)** (default) | BLE GATT `FFF0` / notify `FFF4` / write `FFF5` | Osmo camera directly | DJI R SDK binary (connection `0019`, GPS push `0017`) |
+| **HC-05 (legacy)** | Bluetooth Classic SPP | HC-05 → ESP32 UART | NMEA 0183 @ 1 Hz |
 
-## Hardware / ESP32
+**Android only** for both modes. iOS is not supported (no Classic SPP; BLE camera mode untested on iOS).
 
-- Pair the HC-05 with the phone in **Android Settings → Bluetooth** (default PIN **1234**).
-- HC-05 TX/RX → ESP32 GPS UART (e.g. DOIT DevKit: **GPIO17 TX**, **GPIO16 RX**, **115200** baud — see [`main/board_pins.h`](../main/board_pins.h)).
-- When connected and streaming, the HC-05 LED stays **solid**; the ESP32 parses `$GPRMC` / `$GPGGA` (also `$GNRMC` / `$GNGGA`) like the LC76G module.
+## Camera (BLE) — phone as remote
 
-## NMEA rate
+Mirrors the ESP32 firmware path in `ble/ble.c`, `logic/connect_logic.c`, and `logic/gps_logic.c`:
 
-The app sends **RMC + GGA** once per second (**1 Hz**). The ESP32 demo GNSS path can run up to 10 Hz with a module command; 1 Hz is enough for dashboard GPS on the camera.
+1. Scan for DJI advertisements (manufacturer bytes `0xAA`, `0x08`, `0xFA` at indices 0, 1, 4).
+2. Connect, enable notify on `FFF4`, write on `FFF5`.
+3. Protocol handshake (cmd `0x0019`) — same sequence as `connect_logic_protocol_connect`.
+4. Push GPS with cmd `0x0017` from phone Geolocation (starts at **1 Hz**; increase in `cameraGpsPush.ts` toward **10 Hz** when stable).
 
-## Quick usage
+**First pairing:** enable **First-time pairing** so `verify_mode=1`; confirm the code on the camera screen.
 
-1. Pair HC-05 in system Bluetooth settings.
-2. Open **Osmo BT GPS** on the phone.
-3. **Refresh paired devices** → tap your HC-05 → **Connect**.
-4. **Start GPS stream** (grant location when prompted).
-5. **Stop** when done, then **Disconnect**.
+**Remote identity** defaults match `key_logic.c` (`device_id` `0x12345678`, example MAC). Adjust in `src/protocol/types.ts` if needed.
 
-## Build (development machine)
+## HC-05 (legacy) — ESP32 bridge
+
+- Pair HC-05 in **Android Settings → Bluetooth** (PIN **1234**).
+- HC-05 TX/RX → ESP32 GPS UART (DOIT: **GPIO17 TX**, **GPIO16 RX**, **115200** baud).
+- App streams **RMC + GGA** NMEA @ 1 Hz.
+
+## Quick usage (BLE camera)
+
+1. Open **Osmo BT GPS** on a physical Android phone (real GPS).
+2. Stay on **Camera (BLE)**.
+3. **Scan for Osmo cameras** → tap your camera → **Connect & pair protocol**.
+4. **Start GPS push to camera** (grant location when prompted).
+5. **Stop** / **Disconnect** when done.
+
+## Build
 
 Requirements: **Node.js 20+**, **Android Studio** (SDK 34+), JDK 17.
 
@@ -37,73 +51,43 @@ npx cap sync android
 npx cap open android
 ```
 
-In Android Studio: select a device/emulator → **Run**.
-
-Or from CLI after sync:
-
-```bash
-cd android && ./gradlew assembleDebug
-```
-
-Install the APK from `android/app/build/outputs/apk/debug/`.
-
-### Repeat after web changes
-
-```bash
-npm run build
-npx cap sync android
-```
-
 Shortcut: `npm run cap:sync` (build + sync).
+
+Repeat after web changes: `npm run build && npx cap sync android`.
 
 ## Permissions (Android)
 
-Capacitor Geolocation and `@ascentio-it/capacitor-bluetooth-serial` merge most manifest entries on `cap sync`. Confirm `android/app/src/main/AndroidManifest.xml` includes (or is merged from plugins):
-
 | Permission | Purpose |
 |------------|---------|
-| `BLUETOOTH` / `BLUETOOTH_ADMIN` | Pre-API 31 |
-| `BLUETOOTH_CONNECT` | Connect to paired HC-05 (API 31+) |
-| `BLUETOOTH_SCAN` | List paired devices (API 31+) |
-| `ACCESS_FINE_LOCATION` | Required for BT scan/connect on many OEMs + GPS |
-| `ACCESS_COARSE_LOCATION` | Fallback |
+| `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` | BLE scan + GATT (API 31+) |
+| `ACCESS_FINE_LOCATION` / `COARSE` | Phone GPS + BLE scan on many OEMs |
+| Classic `BLUETOOTH` | HC-05 mode (API ≤ 30) |
 
-If paired devices stay empty on Android 12+, grant **Nearby devices** / **Bluetooth** and **Location** for this app in system settings.
+Grant **Nearby devices**, **Bluetooth**, and **Location** for this app if scan or GPS fails.
 
-**Note:** Use a **physical device** with real GPS. Emulators can test BT/UI but not meaningful NMEA fixes.
+## Plugins
 
-## Plugin choice
-
-**[@ascentio-it/capacitor-bluetooth-serial](https://www.npmjs.com/package/@ascentio-it/capacitor-bluetooth-serial)** (fork of `@e-is/capacitor-bluetooth-serial`):
-
-- **Bluetooth Classic serial (SPP)** — works with HC-05/HC-06.
-- **`getPairedDevices()`** — matches “pair in Settings, then connect in app”.
-- **`checkBluetoothPermissions()`** — Android 12+ `BLUETOOTH_CONNECT` / `BLUETOOTH_SCAN`.
-- Maintained for **Capacitor 8**; Android-focused.
-
-Not used: `@capacitor-community/bluetooth-le` (BLE only).
-
-## Sample NMEA (with fix)
-
-```
-$GPRMC,074700.000,A,2234.732734,N,11356.317512,E,1.67,285.57,220526,,,A*XX
-$GPGGA,074700.000,2234.732734,N,11356.317512,E,1,8,1.0,47.379,M,0.0,M,,*XX
-```
-
-(`*XX` = computed XOR checksum; CRLF appended on transmit.)
-
-## Limitations
-
-- **Android only** (no iOS Classic SPP in this stack).
-- **Browser / `npm run dev`** — UI only; BT write requires native build.
-- **10 Hz** stream target (100 ms interval in `src/services/gpsStream.ts`; actual rate depends on the phone GNSS).
-- Phone GPS accuracy/heading depend on device sensors; satellite count is estimated from horizontal accuracy when the OS does not expose a count.
+- **[@capacitor-community/bluetooth-le](https://www.npmjs.com/package/@capacitor-community/bluetooth-le)** — BLE GATT to Osmo camera.
+- **[@ascentio-it/capacitor-bluetooth-serial](https://www.npmjs.com/package/@ascentio-it/capacitor-bluetooth-serial)** — Classic SPP for HC-05.
+- **[@capacitor/geolocation](https://capacitorjs.com/docs/apis/geolocation)** — phone position for both modes.
 
 ## Project layout
 
 | Path | Role |
 |------|------|
-| `src/utils/nmea.ts` | RMC/GGA/GST builders + checksum |
-| `src/services/bluetooth.ts` | Pair list, connect, write |
-| `src/services/gpsStream.ts` | Geolocation @ 10 Hz → NMEA |
-| `src/views/HomePage.vue` | Single-page UI |
+| `src/protocol/` | DJI frame build/parse, CRC, connection + GPS payloads |
+| `src/services/bleCamera.ts` | Scan, connect, notify, protocol handshake |
+| `src/services/cameraGpsPush.ts` | Geolocation → `0017` push loop |
+| `src/services/geolocationFix.ts` | Shared position → fix helper |
+| `src/services/bluetooth.ts` | HC-05 pair list, SPP write |
+| `src/services/gpsStream.ts` | NMEA stream @ 1 Hz |
+| `src/utils/nmea.ts` | RMC/GGA builders (HC-05 path) |
+| `src/views/HomePage.vue` | UI for both modes |
+
+## Limitations / TODO
+
+- **Hardware validation** required on Osmo Action 4/5/6 — handshake and GPS overlay behavior vary by firmware.
+- **10 Hz GPS push** — change `intervalMs` in `startCameraGpsPush`; watch BLE throughput and fix stability.
+- **iOS** — not targeted; CoreBluetooth pairing flow differs.
+- **Key reporting / record** — not implemented on phone (ESP32 still handles shutter via BOOT).
+- **Browser / `npm run dev`** — UI only; BLE and SPP need a native build.
