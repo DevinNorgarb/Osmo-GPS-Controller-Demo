@@ -1,20 +1,7 @@
 import { Geolocation, type Position } from '@capacitor/geolocation';
-import { Capacitor } from '@capacitor/core';
 import { estimateSatelliteCount, type GpsFix } from '@/utils/nmea';
 
-export async function requestLocationPermissions(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) {
-    return;
-  }
-  const perm = await Geolocation.checkPermissions();
-  if (perm.location === 'granted') {
-    return;
-  }
-  const result = await Geolocation.requestPermissions();
-  if (result.location !== 'granted') {
-    throw new Error('Location permission required for GPS streaming.');
-  }
-}
+export { requestGpsPermissions as requestLocationPermissions } from '@/services/permissions';
 
 let prevSample: { lat: number; lon: number; t: number } | null = null;
 

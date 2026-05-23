@@ -1,15 +1,22 @@
 import { BluetoothSerial } from '@ascentio-it/capacitor-bluetooth-serial';
-import { Capacitor } from '@capacitor/core';
+import {
+  getClassicSppUnavailableMessage,
+  isClassicSppSupported,
+} from '@/utils/platform';
 
 export interface PairedDevice {
   name: string;
   address: string;
 }
 
-export async function ensureBluetoothReady(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) {
-    throw new Error('Bluetooth SPP is only available on Android.');
+export function assertClassicSppSupported(): void {
+  if (!isClassicSppSupported()) {
+    throw new Error(getClassicSppUnavailableMessage());
   }
+}
+
+export async function ensureBluetoothReady(): Promise<void> {
+  assertClassicSppSupported();
 
   const { enabled } = await BluetoothSerial.isEnabled();
   if (!enabled) {

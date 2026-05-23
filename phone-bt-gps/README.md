@@ -1,46 +1,32 @@
-# Osmo BT GPS (Android)
+# Osmo BT GPS
 
-This directory is a **sibling project** to the ESP32 firmware in this repository (PlatformIO / ESP-IDF under `main/`, `logic/`, and related folders at the repo root).
+Sibling to the ESP32 firmware in this repo: a **Vue 3 + Ionic 8 + Capacitor 8** phone app that connects **directly to an Osmo camera over BLE** and pushes phone GPS using the DJI R SDK protocol.
 
-**Vue 3 + Ionic 8 + Capacitor 8** app with two ways to get phone GPS to the Osmo stack:
+## What it does
 
-| Mode | Transport | Target | Protocol |
-|------|-----------|--------|----------|
-| **Camera (BLE)** (default) | BLE GATT `FFF0` / notify `FFF4` / write `FFF5` | Osmo camera directly | DJI R SDK binary (connection `0019`, GPS push `0017`) |
-| **HC-05 (legacy)** | Bluetooth Classic SPP | HC-05 → ESP32 UART | NMEA 0183 @ 1 Hz |
-
-**Android only** for both modes. iOS is not supported (no Classic SPP; BLE camera mode untested on iOS).
-
-## Camera (BLE) — phone as remote
-
-Mirrors the ESP32 firmware path in `ble/ble.c`, `logic/connect_logic.c`, and `logic/gps_logic.c`:
-
-1. Scan for DJI advertisements (manufacturer bytes `0xAA`, `0x08`, `0xFA` at indices 0, 1, 4).
-2. Connect, enable notify on `FFF4`, write on `FFF5`.
-3. Protocol handshake (cmd `0x0019`) — same sequence as `connect_logic_protocol_connect`.
-4. Push GPS with cmd `0x0017` from phone Geolocation (starts at **1 Hz**; increase in `cameraGpsPush.ts` toward **10 Hz** when stable).
+1. **Scan** for DJI BLE advertisements (manufacturer bytes `0xAA`, `0x08`, `0xFA` at indices 0, 1, 4).
+2. **Connect** GATT service `FFF0`, notify `FFF4`, write `FFF5`.
+3. **Protocol handshake** (cmd `0x0019`) — same sequence as ESP32 `connect_logic_protocol_connect`.
+4. **GPS push** (cmd `0x0017`) from phone Geolocation at **1 Hz** (tune in `cameraGpsPush.ts` toward 10 Hz when stable).
 
 **First pairing:** enable **First-time pairing** so `verify_mode=1`; confirm the code on the camera screen.
 
-**Remote identity** defaults match `key_logic.c` (`device_id` `0x12345678`, example MAC). Adjust in `src/protocol/types.ts` if needed.
+**Remote identity** defaults match ESP32 `key_logic.c` (`device_id` `0x12345678`, example MAC). Adjust in `src/protocol/types.ts` if needed.
 
-## HC-05 (legacy) — ESP32 bridge
+> **Legacy:** HC-05 / Bluetooth Classic SPP to ESP32 is **not used** by this app. Old `bluetooth.ts` / `gpsStream.ts` remain in the tree for reference only.
 
-- Pair HC-05 in **Android Settings → Bluetooth** (PIN **1234**).
-- HC-05 TX/RX → ESP32 GPS UART (DOIT: **GPIO17 TX**, **GPIO16 RX**, **115200** baud).
-- App streams **RMC + GGA** NMEA @ 1 Hz.
+## Quick usage
 
-## Quick usage (BLE camera)
+1. Build and install the native app on a **physical phone** (Android or iOS).
+2. **Scan for Osmo cameras** → tap your camera → **Connect & pair protocol**.
+3. **Start GPS push to camera** (grant Bluetooth and Location when prompted).
+4. **Stop** / **Disconnect** when done.
 
-1. Open **Osmo BT GPS** on a physical Android phone (real GPS).
-2. Stay on **Camera (BLE)**.
-3. **Scan for Osmo cameras** → tap your camera → **Connect & pair protocol**.
-4. **Start GPS push to camera** (grant location when prompted).
-5. **Stop** / **Disconnect** when done.
+Browser dev (`npm run dev`) is **UI preview only** — BLE needs a native install. The header chip shows `web` in the browser and `android` / `ios` on device.
 
 ## Build
 
-Requirements: **Node.js 20+**, **Android Studio** (SDK 34+), JDK 17.
+Requirements: **Node.js 20+**, **Android Studio** (SDK 34+) for Android, Xcode for iOS, JDK 17.
 
 ```bash
 cd phone-bt-gps
@@ -55,21 +41,23 @@ Shortcut: `npm run cap:sync` (build + sync).
 
 Repeat after web changes: `npm run build && npx cap sync android`.
 
-## Permissions (Android)
+## Permissions (Android 12+)
 
-| Permission | Purpose |
-|------------|---------|
-| `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` | BLE scan + GATT (API 31+) |
-| `ACCESS_FINE_LOCATION` / `COARSE` | Phone GPS + BLE scan on many OEMs |
-| Classic `BLUETOOTH` | HC-05 mode (API ≤ 30) |
+On a physical device, open the app and use **Grant permissions** (or tap **Scan** — permissions are requested automatically).
 
-Grant **Nearby devices**, **Bluetooth**, and **Location** for this app if scan or GPS fails.
+| System prompt | Android permission | Purpose |
+|---------------|-------------------|---------|
+| **Nearby devices** | `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` | BLE scan + GATT |
+| **Location** | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | Phone GPS; BLE scan on many OEMs |
+
+If you tapped **Don’t allow**, use **Open app settings** on the Permissions card and enable Nearby devices + Location for Osmo BT GPS, then return and tap **Grant permissions** again.
+
+iOS: allow **Bluetooth** and **Location** when prompted on first scan.
 
 ## Plugins
 
 - **[@capacitor-community/bluetooth-le](https://www.npmjs.com/package/@capacitor-community/bluetooth-le)** — BLE GATT to Osmo camera.
-- **[@ascentio-it/capacitor-bluetooth-serial](https://www.npmjs.com/package/@ascentio-it/capacitor-bluetooth-serial)** — Classic SPP for HC-05.
-- **[@capacitor/geolocation](https://capacitorjs.com/docs/apis/geolocation)** — phone position for both modes.
+- **[@capacitor/geolocation](https://capacitorjs.com/docs/apis/geolocation)** — phone position for GPS push.
 
 ## Project layout
 
@@ -78,16 +66,17 @@ Grant **Nearby devices**, **Bluetooth**, and **Location** for this app if scan o
 | `src/protocol/` | DJI frame build/parse, CRC, connection + GPS payloads |
 | `src/services/bleCamera.ts` | Scan, connect, notify, protocol handshake |
 | `src/services/cameraGpsPush.ts` | Geolocation → `0017` push loop |
-| `src/services/geolocationFix.ts` | Shared position → fix helper |
-| `src/services/bluetooth.ts` | HC-05 pair list, SPP write |
-| `src/services/gpsStream.ts` | NMEA stream @ 1 Hz |
-| `src/utils/nmea.ts` | RMC/GGA builders (HC-05 path) |
-| `src/views/HomePage.vue` | UI for both modes |
+| `src/services/permissions.ts` | BLE + location permission requests and status |
+| `src/services/geolocationFix.ts` | Position → fix helper |
+| `src/views/HomePage.vue` | BLE camera UI |
+| `src/services/bluetooth.ts` | *(legacy)* HC-05 SPP — unused by UI |
+| `src/services/gpsStream.ts` | *(legacy)* NMEA @ 1 Hz — unused by UI |
 
 ## Limitations / TODO
 
-- **Hardware validation** required on Osmo Action 4/5/6 — handshake and GPS overlay behavior vary by firmware.
-- **10 Hz GPS push** — change `intervalMs` in `startCameraGpsPush`; watch BLE throughput and fix stability.
-- **iOS** — not targeted; CoreBluetooth pairing flow differs.
-- **Key reporting / record** — not implemented on phone (ESP32 still handles shutter via BOOT).
-- **Browser / `npm run dev`** — UI only; BLE and SPP need a native build.
+- **Hardware validation** on Osmo Action 4/5/6 — handshake and GPS overlay vary by firmware.
+- **10 Hz GPS push** — lower `intervalMs` in `startCameraGpsPush`; watch BLE throughput.
+- **iOS** — CoreBluetooth pairing differs from Android; test on device.
+- **Android BLE reliability** — retry scan after toggling BT; some OEMs need Location on for scan; bond/pair popups vary by camera firmware.
+- **Key reporting / record** — not on phone (ESP32 BOOT still handles shutter).
+- **Browser** — no BLE; use installed APK/IPA.

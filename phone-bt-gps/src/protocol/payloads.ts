@@ -106,6 +106,54 @@ export function parseConnectionResponse(data: Uint8Array): ParsedConnectionRespo
 }
 
 /** gps_data_push_command_frame (48 bytes) */
+/** key_report_command_frame (4 bytes) — cmd 0011 */
+export function serializeKeyReport(
+  keyCode: number,
+  mode: number,
+  keyValue: number,
+): Uint8Array {
+  const buf = new Uint8Array(4);
+  buf[0] = keyCode & 0xff;
+  buf[1] = mode & 0xff;
+  writeU16Le(buf, 2, keyValue);
+  return buf;
+}
+
+/** record_control_command_frame (9 bytes) — cmd 1D03 */
+export function serializeRecordControl(deviceId: number, recordCtrl: number): Uint8Array {
+  const buf = new Uint8Array(9);
+  writeU32Le(buf, 0, deviceId);
+  buf[4] = recordCtrl & 0xff;
+  return buf;
+}
+
+/** camera_power_mode_switch_command_frame (1 byte) — cmd 001A */
+export function serializeCameraPowerMode(powerMode: number): Uint8Array {
+  return new Uint8Array([powerMode & 0xff]);
+}
+
+export function parseCommandRetCode(data: Uint8Array): number | null {
+  if (data.length < 1) {
+    return null;
+  }
+  return data[0]!;
+}
+
+export function retCodeLabel(retCode: number): string {
+  switch (retCode) {
+    case 0x00:
+      return 'OK';
+    case 0x01:
+      return 'parse error';
+    case 0x02:
+      return 'execution failed';
+    case 0xff:
+      return 'undefined error';
+    default:
+      return `code 0x${retCode.toString(16)}`;
+  }
+}
+
 export function serializeGpsPush(payload: GpsPushPayload): Uint8Array {
   const buf = new Uint8Array(48);
   writeI32Le(buf, 0, payload.yearMonthDay);

@@ -2,7 +2,7 @@
   "name": "phone-bt-gps",
   "version": "1.0.0",
   "private": true,
-  "description": "Stream phone GPS as NMEA 0183 over Bluetooth Classic SPP to HC-05 for Osmo GPS Controller",
+  "description": "Push phone GPS to Osmo camera over BLE (DJI R SDK protocol)",
   "type": "module",
   "scripts": {
     "dev": "vite",
