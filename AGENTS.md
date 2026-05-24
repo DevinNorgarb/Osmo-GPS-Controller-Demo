@@ -15,4 +15,4 @@
 - Single-press record should send DJI Key Reporting (cmd 0011, key_code 0x01) first; 1D03 start/stop is fallback when camera status is known.
 - `notify_processing_task` in `data/data.c` needs an 8192-word stack on ESP32 (BLE notify parse + hex logging overflowed at 2048).
 - Valid phone/GNSS input needs RMC status `A` and GGA fix quality ≥ 1; GPS UART logs with bytes but no `$` usually mean wrong HC baud (not 115200) or non-NMEA data.
-- Companion Android app for HC-05 NMEA streaming lives in `phone-bt-gps/` (Vue + Ionic Capacitor, sibling to ESP32 firmware).
+- Companion mobile app is a **separate repo**: `Osmo-Phone-BT-GPS` (Vue + Ionic Capacitor). Default local path: `/Users/devinnorgarb/projects/devin/Osmo-Phone-BT-GPS/`. BLE GPS push to camera is the primary path; legacy HC-05 NMEA code remains in that repo for reference only.

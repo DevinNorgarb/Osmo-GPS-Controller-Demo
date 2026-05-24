@@ -203,9 +203,35 @@ For a more comprehensive understanding of the demo, refer to the following docum
 - **ESP32-C6-WROOM-1**: [ESP32-C6-DevKitC-1 v1.2 - ESP32-C6 User Guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html)
 
 
-## Phone GPS app
+## Phone GPS app (separate repository)
 
-Vue/Ionic Android companion (HC-05 NMEA over Bluetooth Classic): [phone-bt-gps/README.md](phone-bt-gps/README.md).
+The Vue/Ionic Capacitor companion app (BLE camera GPS push, plus legacy HC-05 NMEA reference code) lives in its own repo:
+
+**[Osmo-Phone-BT-GPS](https://github.com/YOUR_USERNAME/Osmo-Phone-BT-GPS)** — clone alongside this firmware tree or install from a published release.
+
+Local path after split: `/Users/devinnorgarb/projects/devin/Osmo-Phone-BT-GPS/` (set the GitHub remote after you publish).
+
+This firmware repo no longer contains `phone-bt-gps/`; see the mobile README for build steps and the firmware `docs/protocol.md` for DJI R SDK framing.
+
+### Repo split (2026)
+
+| Repository | Path | Contents |
+|------------|------|----------|
+| **Firmware** (this repo) | `Osmo-GPS-Controller-Demo/` | ESP32 PlatformIO/ESP-IDF, BLE remote, GPS UART |
+| **Mobile** | `Osmo-Phone-BT-GPS/` | Vue/Ionic Capacitor BLE GPS app |
+
+Publish both to GitHub (replace `YOUR_USERNAME`):
+
+```bash
+# Firmware (from this directory)
+git remote add origin git@github.com:YOUR_USERNAME/Osmo-GPS-Controller-Demo.git   # skip if remote exists
+git push -u origin main
+
+# Mobile (sibling checkout)
+cd ../Osmo-Phone-BT-GPS
+git remote add origin git@github.com:YOUR_USERNAME/Osmo-Phone-BT-GPS.git
+git push -u origin main
+```
 
 ## About PR
 

@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Osmo BT GPS</string>
-    <string name="title_activity_main">Osmo BT GPS</string>
-    <string name="package_name">com.osmo.phonebtgps</string>
-    <string name="custom_url_scheme">com.osmo.phonebtgps</string>
-</resources>

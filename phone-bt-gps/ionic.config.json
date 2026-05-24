@@ -1,7 +1,0 @@
-{
-  "name": "phone-bt-gps",
-  "integrations": {
-    "capacitor": {}
-  },
-  "type": "vue-vite"
-}
