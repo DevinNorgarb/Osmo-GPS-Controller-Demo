@@ -1,4 +1,5 @@
 import { BleClient, ScanMode, type ScanResult } from '@capacitor-community/bluetooth-le';
+import { setBleBackgroundActive } from '@/services/backgroundService';
 import { requestBleAndLocationPermissions } from '@/services/permissions';
 import { buildCameraSleepFrame, CMD_ID_CAMERA_POWER, CMD_SET_CAMERA_POWER } from '@/protocol/cameraPower';
 import {
@@ -303,12 +304,14 @@ export async function connectDjiCamera(
   try {
     await BleClient.connect(device.deviceId, () => {
       connectedDeviceId = null;
+      setBleBackgroundActive(false);
       setState('idle');
     });
 
     connectedDeviceId = device.deviceId;
     await BleClient.discoverServices(device.deviceId);
     setState('ble_connected');
+    setBleBackgroundActive(true);
 
     await BleClient.startNotifications(
       device.deviceId,
@@ -327,6 +330,7 @@ export async function connectDjiCamera(
     setState('protocol_connected');
   } catch (e) {
     connectedDeviceId = null;
+    setBleBackgroundActive(false);
     setState('error');
     throw mapBleError(e, 'connect');
   }
@@ -336,6 +340,7 @@ export async function disconnectDjiCamera(): Promise<void> {
   const id = connectedDeviceId;
   connectedDeviceId = null;
   frameHandlers = [];
+  setBleBackgroundActive(false);
   if (id) {
     try {
       await BleClient.stopNotifications(id, DJI_SERVICE_UUID, DJI_NOTIFY_UUID);

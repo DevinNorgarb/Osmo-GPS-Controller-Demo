@@ -1,5 +1,6 @@
 import { buildGpsPushFrame, fixToGpsPayload } from '@/protocol/gpsPush';
 import { getBleCameraState, writeRawFrame } from '@/services/bleCamera';
+import { setGpsBackgroundActive } from '@/services/backgroundService';
 import { readCurrentFix, resetMotionHistory } from '@/services/geolocationFix';
 
 /** Start at 1 Hz; can increase toward 10 Hz when stable (docs/Q&A). */
@@ -49,6 +50,7 @@ export function startCameraGpsPush(callbacks: {
     }
   };
 
+  setGpsBackgroundActive(true);
   void tick();
   intervalId = setInterval(() => void tick(), intervalMs);
 }
@@ -58,6 +60,7 @@ export function stopCameraGpsPush(): void {
     clearInterval(intervalId);
     intervalId = null;
   }
+  setGpsBackgroundActive(false);
   onStatus = null;
   onError = null;
   pushInFlight = false;

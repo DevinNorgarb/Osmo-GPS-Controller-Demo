@@ -70,6 +70,31 @@
         </ion-card-content>
       </ion-card>
 
+      <ion-card v-if="appPlatform === 'android'">
+        <ion-card-header>
+          <ion-card-title>Background mode</ion-card-title>
+          <ion-card-subtitle>Keep BLE + GPS alive when you switch apps</ion-card-subtitle>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="background-note">
+            While connected to a camera or pushing GPS, Android shows a persistent notification
+            (<strong>Osmo GPS Remote</strong>) so the link stays active in the background. Grant
+            <strong>Notifications</strong> on Android 13+ (Permissions card above).
+          </p>
+          <ion-button expand="block" fill="outline" color="medium" @click="openBatterySettings">
+            Disable battery optimization (optional)
+          </ion-button>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card v-if="appPlatform === 'ios'" color="medium">
+        <ion-card-content>
+          <strong>iOS background BLE</strong> is limited by the system — keep the app in the
+          foreground for reliable GPS push. Android gets full background mode via a foreground
+          service.
+        </ion-card-content>
+      </ion-card>
+
       <ion-card>
         <ion-card-header>
           <ion-card-title>Osmo camera (BLE)</ion-card-title>
@@ -280,10 +305,10 @@ import {
   type DjiCommandResult,
 } from '@/services/bleCamera';
 import {
-  isCameraGpsPushing,
   startCameraGpsPush,
   stopCameraGpsPush,
 } from '@/services/cameraGpsPush';
+import { openBatteryOptimizationSettings } from '@/services/backgroundService';
 import { requestLocationPermissions } from '@/services/geolocationFix';
 import {
   getPermissionRows,
@@ -614,6 +639,14 @@ async function runRemoteAction(
   }
 }
 
+async function openBatterySettings(): Promise<void> {
+  try {
+    await openBatteryOptimizationSettings();
+  } catch (e) {
+    setError(e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function remoteRecordToggle(): Promise<void> {
   await runRemoteAction('Record / Stop (0011)', sendRecordKeyReport);
 }
@@ -641,14 +674,17 @@ onMounted(() => {
 onUnmounted(() => {
   clearScanTimeout();
   unsubscribeBleState?.();
-  if (isCameraGpsPushing()) {
-    stopCameraGpsPush();
-  }
-  void stopDjiScan();
+  // Do not stop BLE/GPS here — foreground service keeps them alive when the app is backgrounded.
 });
 </script>
 
 <style scoped>
+.background-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--ion-color-medium);
+}
+
 .hint {
   color: var(--ion-color-medium);
   font-size: 0.9rem;

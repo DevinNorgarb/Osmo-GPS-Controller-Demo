@@ -21,6 +21,13 @@ interface BluetoothLePermissionsPlugin {
 
 const BluetoothLeNative = registerPlugin<BluetoothLePermissionsPlugin>('BluetoothLe');
 
+interface OsmoBackgroundPermissionsPlugin {
+  checkNotificationPermission(): Promise<{ granted: boolean }>;
+  requestNotificationPermission(): Promise<{ granted: boolean }>;
+}
+
+const OsmoBackgroundNative = registerPlugin<OsmoBackgroundPermissionsPlugin>('OsmoBackground');
+
 let bleStackReady = false;
 
 export type PermissionUiStatus = 'granted' | 'denied' | 'prompt' | 'unavailable';
@@ -169,6 +176,22 @@ export async function getPermissionRows(): Promise<PermissionRow[]> {
       status: location,
       needsSettings: location === 'denied',
     });
+
+    let notificationStatus: PermissionUiStatus = 'unavailable';
+    try {
+      const notif = await OsmoBackgroundNative.checkNotificationPermission();
+      notificationStatus = notif.granted ? 'granted' : 'prompt';
+    } catch {
+      notificationStatus = 'unavailable';
+    }
+
+    rows.push({
+      id: 'notifications',
+      label: 'Notifications',
+      detail: 'Persistent notification while BLE/GPS runs in background (Android 13+)',
+      status: notificationStatus,
+      needsSettings: false,
+    });
   } else {
     rows.push({
       id: 'bluetooth',
@@ -216,6 +239,15 @@ export async function requestBleAndLocationPermissions(): Promise<void> {
     if (missing.length > 0) {
       map = await BluetoothLeNative.requestPermissions({ permissions: aliases });
       assertAllGranted(map, aliases, 'Bluetooth');
+    }
+
+    try {
+      const notif = await OsmoBackgroundNative.checkNotificationPermission();
+      if (!notif.granted) {
+        await OsmoBackgroundNative.requestNotificationPermission();
+      }
+    } catch {
+      // Foreground service still works; notification may be suppressed on some OEMs.
     }
   }
 
@@ -293,6 +325,7 @@ export function isReadyForBleScan(rows: PermissionRow[]): boolean {
     (r) =>
       r.id !== 'native' &&
       r.id !== 'bluetooth' &&
+      r.id !== 'notifications' &&
       (r.status === 'prompt' || r.status === 'denied'),
   );
 }

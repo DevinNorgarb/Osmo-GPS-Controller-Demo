@@ -18,6 +18,8 @@ android {
     }
     buildTypes {
         release {
+            // Local release installs: no upload keystore in repo; debug cert is fine for adb/sideload.
+            signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
