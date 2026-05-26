@@ -7,6 +7,13 @@ menu "Example Configuration"
             Enable 480x320 SPI display, PSRAM, and backlight status on GPIO12.
             Set via sdkconfig.lilygo-lily-pi.defaults for PlatformIO env lilygo-lily-pi.
 
+    config WAVESHARE_ESP32_S3_TOUCH_LCD_128
+        bool "Waveshare ESP32-S3-Touch-LCD-1.28 (GC9A01 round display)"
+        default n
+        help
+            Enable 240x240 SPI display (GC9A01), PSRAM, backlight on GPIO2.
+            GPS UART2 on SH1.0 GPIO16/17. PlatformIO env waveshare-esp32-s3-touch-lcd-1.
+
     config EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
         bool "Dump whole adv data and scan response data in example"
         default n

@@ -26,6 +26,10 @@ if(CONFIG_LILYGO_LILY_PI)
     list(APPEND MAIN_PRIV_REQUIRES lilypi_display esp_lvgl_port)
 endif()
 
+if(CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128)
+    list(APPEND MAIN_PRIV_REQUIRES waveshare_s3_lcd_display esp_lvgl_port)
+endif()
+
 idf_component_register(SRCS ${MAIN_SRCS}
                     PRIV_REQUIRES ${MAIN_PRIV_REQUIRES}
                     INCLUDE_DIRS "." "../utils/crc" "../protocol" "../ble" "../data" "../logic" "../test")
