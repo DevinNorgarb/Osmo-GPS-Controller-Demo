@@ -166,8 +166,9 @@ esp_err_t waveshare_s3_lcd_display_hw_init(void)
         .hres = WAVESHARE_S3_LCD_HRES,
         .vres = WAVESHARE_S3_LCD_VRES,
         .monochrome = false,
-        /* Fix common “weird neon colors”: this panel/port expects byte-swapped RGB565. */
-        .color_format = LV_COLOR_FORMAT_RGB565_SWAPPED,
+#if LVGL_VERSION_MAJOR >= 9
+        .color_format = LV_COLOR_FORMAT_RGB565,
+#endif
         .rotation = {
             .swap_xy = false,
             .mirror_x = true,
@@ -175,6 +176,10 @@ esp_err_t waveshare_s3_lcd_display_hw_init(void)
         },
         .flags = {
             .buff_dma = true,
+#if LVGL_VERSION_MAJOR >= 9
+            /* Fix common “weird neon colors”: this panel/port expects byte-swapped RGB565 on SPI. */
+            .swap_bytes = true,
+#endif
         },
     };
     s_lv_disp = lvgl_port_add_disp(&disp_cfg);

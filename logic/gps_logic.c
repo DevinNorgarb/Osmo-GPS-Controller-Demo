@@ -35,13 +35,47 @@
 
 #define TAG "LOGIC_GPS"
 #define GPS_PUSH_INTERVAL_MS 100
+#define GPS_PUSH_TASK_STACK_WORDS 8192
 
-#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-#define GPS_UART_BAUD_FINAL   9600
-#define GPS_UART_BAUD_PROBE   9600
-#else
 #define GPS_UART_BAUD_FINAL   115200
 #define GPS_UART_BAUD_PROBE   115200
+
+/**
+ * Waveshare ESP32-S3-Touch-LCD-1.28:
+ * - Most NMEA sources we use in this repo (HC-05 phone bridge, many GNSS breakouts after config) run at 115200.
+ * - Some u-blox NEO-M8 modules ship at 9600 by default.
+ *
+ * We do a quick one-time autodetect on boot: try 115200 then 9600 and pick the first baud that produces an NMEA '$'.
+ */
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+static int detect_gps_uart_baud_waveshare(void)
+{
+    static const int candidates[] = { 115200, 9600 };
+    uint8_t tmp[128];
+
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        int baud = candidates[i];
+        uart_set_baudrate(BOARD_GPS_UART_PORT, baud);
+        uart_flush_input(BOARD_GPS_UART_PORT);
+
+        int64_t end_us = esp_timer_get_time() + 700 * 1000; /* ~0.7s per baud */
+        while (esp_timer_get_time() < end_us) {
+            int n = uart_read_bytes(BOARD_GPS_UART_PORT, tmp, sizeof(tmp), 20 / portTICK_PERIOD_MS);
+            if (n > 0) {
+                for (int j = 0; j < n; j++) {
+                    if (tmp[j] == '$') {
+                        ESP_LOGI(TAG, "Detected GPS NMEA on UART2 at %d baud", baud);
+                        return baud;
+                    }
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+
+    ESP_LOGW(TAG, "No NMEA detected during baud probe; defaulting to %d", GPS_UART_BAUD_FINAL);
+    return GPS_UART_BAUD_FINAL;
+}
 #endif
 
 // Define buffer to store received data
@@ -900,14 +934,23 @@ uint32_t gps_get_last_nmea_ms_ago(void)
  */
 void initSendGpsDataToCameraTask(void) {
     init_gps_data();
+
     initUartGps(GPS_UART_BAUD_PROBE);
+
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+    int detected_baud = detect_gps_uart_baud_waveshare();
+    uart_set_baudrate(BOARD_GPS_UART_PORT, detected_baud);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    configure_gps_module();
+#else
     configure_gps_module();
     if (GPS_UART_BAUD_PROBE != GPS_UART_BAUD_FINAL) {
         uart_set_baudrate(BOARD_GPS_UART_PORT, GPS_UART_BAUD_FINAL);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
+#endif
 
     xTaskCreate(rx_task_GPS, "uart_rx_task_GPS", 1024 * 4, NULL, 0, NULL);
-    xTaskCreate(gps_push_task, "gps_push_task", 2048, NULL, 1, NULL);
+    xTaskCreate(gps_push_task, "gps_push_task", GPS_PUSH_TASK_STACK_WORDS, NULL, 1, NULL);
     ESP_LOGI(TAG, "GPS UART + 10 Hz DJI push task started");
 }
