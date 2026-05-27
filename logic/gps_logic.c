@@ -22,6 +22,10 @@
 #include <math.h>
 #include <ctype.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "sdkconfig.h"
+
 #include "gps_logic.h"
 #include "board_pins.h"
 #include "connect_logic.h"
@@ -29,6 +33,15 @@
 #include "dji_protocol_data_structures.h"
 
 #define TAG "LOGIC_GPS"
+#define GPS_PUSH_INTERVAL_MS 100
+
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+#define GPS_UART_BAUD_FINAL   115200
+#define GPS_UART_BAUD_PROBE   9600
+#else
+#define GPS_UART_BAUD_FINAL   115200
+#define GPS_UART_BAUD_PROBE   115200
+#endif
 
 // Define buffer to store received data
 // 定义缓冲区用于存储接收到的数据
@@ -116,6 +129,14 @@ double gps_get_latitude(void) {
 
 double gps_get_longitude(void) {
     return GPS_Data.Longitude;
+}
+
+double gps_get_altitude(void) {
+    return GPS_Data.Altitude;
+}
+
+uint8_t gps_get_num_satellites(void) {
+    return GPS_Data.Num_Satellites;
 }
 
 // Store previous altitude and time for velocity calculation
@@ -498,8 +519,6 @@ static void parse_nmea_line(char *line) {
  *               Buffer containing NMEA sentences
  */
 void Parse_NMEA_Buffer(char *buffer) {
-    init_gps_data();
-
     char *start = buffer; // 指向字符串的开始
                           // Points to the start of string
     char *end = NULL;     // 指向每行的结束位置
@@ -613,49 +632,30 @@ static uint32_t gps_push_speed_accuracy_cms(void) {
     return 10;
 }
 
-void gps_push_data() {
-    // 时间转换
-    // Time conversion
+void gps_push_data(void) {
     int32_t year_month_day = (GPS_Data.Year + 2000) * 10000 + GPS_Data.Month * 100 + GPS_Data.Day;
     int32_t hour_minute_second = (GPS_Data.Hour + 8) * 10000 + GPS_Data.Minute * 100 + (int32_t)GPS_Data.Second;
-
-    // 经纬度转换
-    // Longitude and latitude conversion
     int32_t gps_longitude = (int32_t)(GPS_Data.Longitude * 1e7);
     int32_t gps_latitude = (int32_t)(GPS_Data.Latitude * 1e7);
-
-    // 高度转换
-    // Height conversion
-    int32_t height = (int32_t)(GPS_Data.Altitude * 1000);    // 单位 mm
-                                                             // Unit: mm
-
-    // 速度转换
-    // Speed conversion
-    float speed_to_north = GPS_Data.Velocity_North * 100;    // m/s 转换为 cm/s
-                                                             // Convert m/s to cm/s
-    float speed_to_east = GPS_Data.Velocity_East * 100;      // m/s 转换为 cm/s
-                                                             // Convert m/s to cm/s
-    float speed_to_wnward = GPS_Data.Velocity_Descend * 100; // m/s 转换为 cm/s
-                                                             // Convert m/s to cm/s
-
-    // 卫星数量
-    // Number of satellites
+    int32_t height = (int32_t)(GPS_Data.Altitude * 1000);
+    float speed_to_north = (float)(GPS_Data.Velocity_North * 100.0);
+    float speed_to_east = (float)(GPS_Data.Velocity_East * 100.0);
+    float speed_to_wnward = (float)(GPS_Data.Velocity_Descend * 100.0);
     uint32_t satellite_number = GPS_Data.Num_Satellites;
+    uint32_t vertical_accuracy = gps_push_vertical_accuracy_mm();
+    uint32_t horizontal_accuracy = gps_push_horizontal_accuracy_mm();
+    uint32_t speed_accuracy = gps_push_speed_accuracy_cms();
 
-    // 打印数据
-    // ESP_LOGI(TAG, "GPS Data:");
-    // ESP_LOGI(TAG, "  YearMonthDay (uint32_t): %lu", (unsigned long)year_month_day);
-    // ESP_LOGI(TAG, "  HourMinuteSecond (uint32_t, UTC+8): %lu", (unsigned long)hour_minute_second);
-    // ESP_LOGI(TAG, "  Longitude (uint32_t, scaled): %lu", (unsigned long)gps_longitude);
-    // ESP_LOGI(TAG, "  Latitude (uint32_t, scaled): %lu", (unsigned long)gps_latitude);
-    // ESP_LOGI(TAG, "  Height (uint32_t, mm): %lu", (unsigned long)height);
-    // ESP_LOGI(TAG, "  Speed to North (float, cm/s): %.2f", speed_to_north);
-    // ESP_LOGI(TAG, "  Speed to East (float, cm/s): %.2f", speed_to_east);
-    // ESP_LOGI(TAG, "  Speed to Downward (float, cm/s): %.2f", speed_to_wnward);
-    // ESP_LOGI(TAG, "  Satellite Number (uint32_t): %lu", (unsigned long)satellite_number);
+    static uint32_t push_log_counter;
+    if ((push_log_counter++ % 10) == 0) {
+        ESP_LOGI(TAG,
+                 "DJI 0x0017 push: lat=%.5f lon=%.5f alt=%.1fm sats=%u "
+                 "vN=%.1f vE=%.1f vD=%.1f hAcc=%umm vAcc=%umm",
+                 GPS_Data.Latitude, GPS_Data.Longitude, GPS_Data.Altitude, satellite_number,
+                 speed_to_north, speed_to_east, speed_to_wnward,
+                 (unsigned)horizontal_accuracy, (unsigned)vertical_accuracy);
+    }
 
-    // 创建 GPS 数据帧
-    // Create GPS data frame
     gps_data_push_command_frame gps_frame = {
         .year_month_day = year_month_day,
         .hour_minute_second = hour_minute_second,
@@ -665,14 +665,12 @@ void gps_push_data() {
         .speed_to_north = speed_to_north,
         .speed_to_east = speed_to_east,
         .speed_to_wnward = speed_to_wnward,
-        .vertical_accuracy = gps_push_vertical_accuracy_mm(),
-        .horizontal_accuracy = gps_push_horizontal_accuracy_mm(),
-        .speed_accuracy = gps_push_speed_accuracy_cms(),
+        .vertical_accuracy = vertical_accuracy,
+        .horizontal_accuracy = horizontal_accuracy,
+        .speed_accuracy = speed_accuracy,
         .satellite_number = satellite_number
     };
 
-    // 推送 GPS 数据到相机，无应答，默认返回 NULL
-    // Push GPS data to camera, no response, returns NULL by default
     gps_data_push_response_frame *response = command_logic_push_gps_data(&gps_frame);
     if (response != NULL) {
         free(response);
@@ -730,10 +728,79 @@ static void log_gps_uart_chunk(const uint8_t *data, int len) {
     }
 }
 
-static void initUartGps(void)
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+static void ubx_send(const uint8_t *payload, uint16_t payload_len, uint8_t cls, uint8_t id)
+{
+    uint8_t frame[64];
+    const uint16_t frame_len = (uint16_t)(payload_len + 8);
+
+    if (frame_len > sizeof(frame)) {
+        return;
+    }
+
+    frame[0] = 0xB5;
+    frame[1] = 0x62;
+    frame[2] = cls;
+    frame[3] = id;
+    frame[4] = (uint8_t)(payload_len & 0xFF);
+    frame[5] = (uint8_t)(payload_len >> 8);
+    memcpy(&frame[6], payload, payload_len);
+
+    uint8_t ck_a = 0;
+    uint8_t ck_b = 0;
+    for (uint16_t i = 2; i < 6 + payload_len; i++) {
+        ck_a = (uint8_t)(ck_a + frame[i]);
+        ck_b = (uint8_t)(ck_b + ck_a);
+    }
+    frame[6 + payload_len] = ck_a;
+    frame[7 + payload_len] = ck_b;
+
+    uart_write_bytes(BOARD_GPS_UART_PORT, (const char *)frame, frame_len);
+}
+
+static void configure_ublox_neo_m8(void)
+{
+    static const uint8_t cfg_prt[] = {
+        0x01, 0x00, 0x00, 0x00,
+        0xD0, 0x08, 0x00, 0x00,
+        0x00, 0xC2, 0x01, 0x00,
+        0x07, 0x00, 0x03, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    };
+    static const uint8_t cfg_rate[] = {
+        0x64, 0x00, 0x01, 0x00, 0x00, 0x00,
+    };
+    static const uint8_t cfg_msg_gga[] = { 0xF0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
+    static const uint8_t cfg_msg_rmc[] = { 0xF0, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
+    static const uint8_t cfg_msg_gst[] = { 0xF0, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
+
+    ubx_send(cfg_prt, sizeof(cfg_prt), 0x06, 0x00);
+    vTaskDelay(pdMS_TO_TICKS(200));
+    uart_set_baudrate(BOARD_GPS_UART_PORT, GPS_UART_BAUD_FINAL);
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    ubx_send(cfg_rate, sizeof(cfg_rate), 0x06, 0x08);
+    ubx_send(cfg_msg_gga, sizeof(cfg_msg_gga), 0x06, 0x01);
+    ubx_send(cfg_msg_rmc, sizeof(cfg_msg_rmc), 0x06, 0x01);
+    ubx_send(cfg_msg_gst, sizeof(cfg_msg_gst), 0x06, 0x01);
+    ESP_LOGI(TAG, "Configured u-blox NEO-M8: 115200 8N1, 10 Hz, GGA+RMC+GST");
+}
+#endif
+
+static void configure_gps_module(void)
+{
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+    configure_ublox_neo_m8();
+#else
+    const char *gps_command = "$PAIR050,100*22\r\n";
+    uart_write_bytes(BOARD_GPS_UART_PORT, gps_command, strlen(gps_command));
+#endif
+}
+
+static void initUartGps(int baud_rate)
 {
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = baud_rate,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -746,6 +813,18 @@ static void initUartGps(void)
     uart_driver_install(BOARD_GPS_UART_PORT, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     uart_param_config(BOARD_GPS_UART_PORT, &uart_config);
     uart_set_pin(BOARD_GPS_UART_PORT, BOARD_GPS_TXD_PIN, BOARD_GPS_RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
+static void gps_push_task(void *arg)
+{
+    (void)arg;
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(GPS_PUSH_INTERVAL_MS));
+        if (connect_logic_get_state() == PROTOCOL_CONNECTED && is_current_gps_data_valid()) {
+            gps_push_data();
+        }
+    }
 }
 
 /**
@@ -791,11 +870,6 @@ static void rx_task_GPS(void *arg)
             if (is_current_gps_data_valid()) {
                 print_gps_data();
             }
-
-            if(connect_logic_get_state() == PROTOCOL_CONNECTED && is_current_gps_data_valid()){
-                gps_push_data();
-
-            }
         }
         // 如果没有数据读取，休眠一小段时间，避免任务占用 CPU
         // If no data is read, sleep for a short time to avoid CPU occupation
@@ -812,17 +886,15 @@ static void rx_task_GPS(void *arg)
  * Initialize GPS UART and related tasks to periodically receive GPS data.
  */
 void initSendGpsDataToCameraTask(void) {
-    initUartGps();
-    // "$PAIR050,1000*12\r\n" 为 1Hz 更新率
-    // "$PAIR050,1000*12\r\n" for 1Hz update rate
-    // "$PAIR050,500*26\r\n" 为 5Hz 更新率
-    // "$PAIR050,500*26\r\n" for 5Hz update rate
-    // "$PAIR050,100*22\r\n" 为 10Hz 更新率
-    // "$PAIR050,100*22\r\n" for 10Hz update rate
-    char* gps_command = "$PAIR050,100*22\r\n";  // （>1Hz 仅 RMC 和 GGA 支持）
-                                                // (>1Hz only RMC and GGA supported)
-    uart_write_bytes(BOARD_GPS_UART_PORT, gps_command, strlen(gps_command));
+    init_gps_data();
+    initUartGps(GPS_UART_BAUD_PROBE);
+    configure_gps_module();
+    if (GPS_UART_BAUD_PROBE != GPS_UART_BAUD_FINAL) {
+        uart_set_baudrate(BOARD_GPS_UART_PORT, GPS_UART_BAUD_FINAL);
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 
     xTaskCreate(rx_task_GPS, "uart_rx_task_GPS", 1024 * 4, NULL, 0, NULL);
-    ESP_LOGI(TAG, "uart_rx_task_GPS are running\n");
+    xTaskCreate(gps_push_task, "gps_push_task", 2048, NULL, 1, NULL);
+    ESP_LOGI(TAG, "GPS UART + 10 Hz DJI push task started");
 }

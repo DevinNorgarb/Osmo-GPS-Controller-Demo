@@ -37,6 +37,7 @@
 static lv_obj_t *s_lbl_ble;
 static lv_obj_t *s_lbl_gps;
 static lv_obj_t *s_lbl_gps_coord;
+static lv_obj_t *s_lbl_gps_detail;
 static lv_obj_t *s_lbl_record;
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
@@ -210,15 +211,27 @@ static void update_status_labels(void)
             snprintf(coord, sizeof(coord), "Lat: %.5f  Lng: %.5f", gps_get_latitude(), gps_get_longitude());
             set_status_row(s_lbl_gps_coord, coord, 0xFFFFFF);
         }
+        if (s_lbl_gps_detail != NULL) {
+            char detail[48];
+            snprintf(detail, sizeof(detail), "Alt: %.0fm  Sats: %u",
+                     gps_get_altitude(), (unsigned)gps_get_num_satellites());
+            set_status_row(s_lbl_gps_detail, detail, 0xFFFFFF);
+        }
     } else if (gps_found) {
         set_status_row(s_lbl_gps, "GPS: Waiting for fix", 0xFFD040);
         if (s_lbl_gps_coord != NULL) {
             set_status_row(s_lbl_gps_coord, "Lat: --  Lng: --", 0x888888);
         }
+        if (s_lbl_gps_detail != NULL) {
+            set_status_row(s_lbl_gps_detail, "Alt: --  Sats: --", 0x888888);
+        }
     } else {
         set_status_row(s_lbl_gps, "GPS: No signal", 0xFF6060);
         if (s_lbl_gps_coord != NULL) {
             set_status_row(s_lbl_gps_coord, "Lat: --  Lng: --", 0x888888);
+        }
+        if (s_lbl_gps_detail != NULL) {
+            set_status_row(s_lbl_gps_detail, "Alt: --  Sats: --", 0x888888);
         }
     }
 
@@ -272,11 +285,12 @@ static void create_status_screen(void)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-    const int y_title = 28;
-    const int y_ble = 68;
-    const int y_gps = 96;
-    const int y_gps_coord = 120;
-    const int y_record = 144;
+    const int y_title = 24;
+    const int y_ble = 56;
+    const int y_gps = 84;
+    const int y_gps_coord = 106;
+    const int y_gps_detail = 128;
+    const int y_record = 150;
 
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "Osmo GPS");
@@ -295,6 +309,10 @@ static void create_status_screen(void)
     s_lbl_gps_coord = lv_label_create(scr);
     style_status_label(s_lbl_gps_coord);
     lv_obj_align(s_lbl_gps_coord, LV_ALIGN_TOP_MID, 0, y_gps_coord);
+
+    s_lbl_gps_detail = lv_label_create(scr);
+    style_status_label(s_lbl_gps_detail);
+    lv_obj_align(s_lbl_gps_detail, LV_ALIGN_TOP_MID, 0, y_gps_detail);
 
     s_lbl_record = lv_label_create(scr);
     style_status_label(s_lbl_record);

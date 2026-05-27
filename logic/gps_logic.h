@@ -109,4 +109,8 @@ double gps_get_latitude(void);
 
 double gps_get_longitude(void);
 
+double gps_get_altitude(void);
+
+uint8_t gps_get_num_satellites(void);
+
 #endif
