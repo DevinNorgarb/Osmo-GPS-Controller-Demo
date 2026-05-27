@@ -89,6 +89,9 @@ void ble_set_continuous_scan(bool enable);
 
 esp_err_t ble_stop_scanning(void);
 
+/** True while a GAP scan is believed active (see ble_stop_scanning). */
+bool ble_is_scan_active(void);
+
 /** Clear scan counters/flags before a new connect attempt. */
 void ble_reset_scan_state(void);
 

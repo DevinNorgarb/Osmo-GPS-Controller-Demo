@@ -164,9 +164,11 @@ int connect_logic_ble_connect(bool is_reconnecting) {
     /* 开始扫描并尝试连接 */
     ble_set_reconnecting(is_reconnecting);
     ble_set_continuous_scan(false);
+    if (ble_is_scan_active()) {
+        ble_stop_scanning();
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
     ble_reset_scan_state();
-    ble_stop_scanning();
-    vTaskDelay(pdMS_TO_TICKS(100));
     ble_set_continuous_scan(true);
     ret = ble_start_scanning_and_connect();
     if (ret != ESP_OK) {
@@ -189,8 +191,10 @@ int connect_logic_ble_connect(bool is_reconnecting) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     ble_set_continuous_scan(false);
+    if (ble_is_scan_active()) {
+        ble_stop_scanning();
+    }
     ble_reset_scan_state();
-    ble_stop_scanning();
     if (!connected) {
         ESP_LOGW(TAG, "BLE connection timed out");
         connect_state = BLE_INIT_COMPLETE;
@@ -248,6 +252,23 @@ int connect_logic_ble_connect(bool is_reconnecting) {
  */
 int connect_logic_ble_disconnect(void) {
     connect_state_t old_state = connect_state;
+
+    if (old_state == BLE_SEARCHING) {
+        ESP_LOGI(TAG, "Cancelling BLE scan...");
+        ble_set_continuous_scan(false);
+        if (ble_is_scan_active()) {
+            ble_stop_scanning();
+        }
+        ble_reset_scan_state();
+        connect_state = BLE_INIT_COMPLETE;
+        camera_status_initialized = false;
+        return 0;
+    }
+
+    if (old_state == BLE_INIT_COMPLETE || old_state == BLE_NOT_INIT) {
+        return 0;
+    }
+
     connect_state = BLE_DISCONNECTING;
 
     ESP_LOGI(TAG, "Disconnecting camera...");

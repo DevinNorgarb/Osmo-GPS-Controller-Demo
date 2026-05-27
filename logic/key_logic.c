@@ -18,6 +18,7 @@
  */
 
 #include <time.h>
+#include "sdkconfig.h"
 #include "key_logic.h"
 #include "board_pins.h"
 #include "driver/gpio.h"
@@ -51,6 +52,11 @@ static TickType_t key_press_start_time = 0;
 // 单击与长按事件检测时间间隔（例如：50ms）
 // Time interval for detecting single press and long press events (e.g., 50ms)
 #define KEY_SCAN_INTERVAL pdMS_TO_TICKS(50)
+
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+/* Ignore BOOT glitches while held at power-on; connect is touch-only on Waveshare */
+#define KEY_BOOT_DEBOUNCE_MS 3000
+#endif
 
 /* key_scan_task only polls GPIO; BLE/protocol work needs a deeper stack on ESP32 */
 #define KEY_SCAN_TASK_STACK      2048
@@ -97,13 +103,15 @@ static void handle_boot_long_press() {
     /* Reconnect BLE */
     connect_state_t current_state = connect_logic_get_state();
 
-    if (current_state >= BLE_INIT_COMPLETE) {
-        ESP_LOGI(TAG, "Current state is %d, disconnecting Bluetooth...", current_state);
+    if (current_state == BLE_CONNECTED || current_state == PROTOCOL_CONNECTED ||
+        current_state == BLE_SEARCHING || current_state == BLE_DISCONNECTING) {
+        ESP_LOGI(TAG, "State %d: tearing down link before connect...", current_state);
         int res = connect_logic_ble_disconnect();
         if (res == -1) {
             ESP_LOGE(TAG, "Failed to disconnect Bluetooth.");
             return;
         }
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 
     ESP_LOGI(TAG, "Attempting to connect Bluetooth...");
@@ -257,9 +265,26 @@ static void key_record_worker_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+static void handle_waveshare_boot_long_press(void)
+{
+    connect_state_t st = connect_logic_get_state();
+    if (st == BLE_SEARCHING || st == BLE_CONNECTED || st == PROTOCOL_CONNECTED ||
+        st == BLE_DISCONNECTING) {
+        ESP_LOGI(TAG, "BOOT long-press: disconnect / cancel (state=%d)", st);
+        connect_logic_ble_disconnect();
+    }
+}
+#endif
+
 void key_logic_request_connect(void) {
     if (s_connect_task_handle != NULL) {
-        ESP_LOGW(TAG, "Connect already in progress, ignoring long press");
+        ESP_LOGW(TAG, "Connect already in progress");
+        return;
+    }
+    connect_state_t st = connect_logic_get_state();
+    if (st == BLE_SEARCHING || st == BLE_DISCONNECTING) {
+        ESP_LOGW(TAG, "Connect ignored: busy (state=%d)", st);
         return;
     }
     BaseType_t ok = xTaskCreate(
@@ -305,7 +330,16 @@ void key_logic_request_record(void) {
  * - Single press: start or stop recording based on current camera mode, and switch camera mode.
  */
 static void key_scan_task(void *arg) {
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+    const TickType_t boot_ready_tick = xTaskGetTickCount() + pdMS_TO_TICKS(KEY_BOOT_DEBOUNCE_MS);
+#endif
     while (1) {
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+        if (xTaskGetTickCount() < boot_ready_tick) {
+            vTaskDelay(KEY_SCAN_INTERVAL);
+            continue;
+        }
+#endif
         // 获取按键状态
         // Get key state
         bool new_key_state = gpio_get_level(BOARD_BOOT_KEY_GPIO);
@@ -322,8 +356,11 @@ static void key_scan_task(void *arg) {
                 // 长按事件（持续按下达到阈值时立即触发）
                 // Long press event (triggered immediately when threshold is reached)
                 current_key_event = KEY_EVENT_LONG_PRESS;
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+                handle_waveshare_boot_long_press();
+#else
                 key_logic_request_connect();
-                // ESP_LOGI(TAG, "Long press detected. Duration: %lu ticks", press_duration);
+#endif
             }
         } else if (new_key_state == 1 && key_pressed) { // 按键松开 / Key released
             key_pressed = false;
@@ -334,7 +371,13 @@ static void key_scan_task(void *arg) {
                 current_key_event = KEY_EVENT_SINGLE;
                 ESP_LOGI(TAG, "Single press detected (%lu ms).",
                          (unsigned long)(press_duration * portTICK_PERIOD_MS));
+#if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
+                if (connect_logic_get_state() == PROTOCOL_CONNECTED) {
+                    key_logic_request_record();
+                }
+#else
                 key_logic_request_record();
+#endif
             } else {
                 ESP_LOGI(TAG, "BOOT key released after long press (no single-click action).");
             }

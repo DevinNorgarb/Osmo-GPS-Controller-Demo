@@ -37,76 +37,86 @@ static lv_obj_t *s_lbl_gps;
 static lv_obj_t *s_lbl_record;
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-#define STATUS_FONT_BODY  &lv_font_montserrat_20
+#define STATUS_FONT_TITLE &lv_font_montserrat_20
+#define STATUS_FONT_BODY  &lv_font_montserrat_14
+#define STATUS_FONT_BTN   &lv_font_montserrat_20
 #define STATUS_FONT_HINT  &lv_font_montserrat_14
-#define STATUS_TEXT_W     190
-static volatile bool s_touch_seen;
-static lv_obj_t *s_lbl_touch;
+#define STATUS_TEXT_W     180
+
 static lv_obj_t *s_btn_action;
 static lv_obj_t *s_lbl_action;
 static lv_obj_t *s_lbl_guide;
 
-static const char *ble_state_text(connect_state_t state)
-{
-    switch (state) {
-    case BLE_NOT_INIT:
-        return "BLE  --";
-    case BLE_INIT_COMPLETE:
-        return "BLE  idle";
-    case BLE_SEARCHING:
-        return "BLE  scan";
-    case BLE_CONNECTED:
-        return "BLE  link";
-    case PROTOCOL_CONNECTED:
-        return "CAM  ok";
-    case BLE_DISCONNECTING:
-        return "BLE  ...";
-    default:
-        return "BLE  ?";
-    }
-}
-
 static void style_status_label(lv_obj_t *label)
 {
     lv_obj_set_style_text_font(label, STATUS_FONT_BODY, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(label, STATUS_TEXT_W);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 }
 
-static void mark_touch_seen(void)
+static void set_status_row(lv_obj_t *label, const char *text, uint32_t color_hex)
 {
-    s_touch_seen = true;
-    if (s_lbl_touch != NULL) {
-        lv_label_set_text(s_lbl_touch, "touch OK");
-        lv_obj_set_style_text_color(s_lbl_touch, lv_color_hex(0x40FF80), 0);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_hex(color_hex), 0);
+}
+
+static const char *camera_status_text(connect_state_t state)
+{
+    switch (state) {
+    case BLE_NOT_INIT:
+        return "Camera: Starting...";
+    case BLE_INIT_COMPLETE:
+        return "Camera: Not connected";
+    case BLE_SEARCHING:
+        return "Camera: Searching...";
+    case BLE_CONNECTED:
+        return "Camera: Pairing...";
+    case PROTOCOL_CONNECTED:
+        return "Camera: Connected";
+    case BLE_DISCONNECTING:
+        return "Camera: Disconnecting";
+    default:
+        return "Camera: Unknown";
     }
+}
+
+static uint32_t camera_status_color(connect_state_t state)
+{
+    if (state == PROTOCOL_CONNECTED) {
+        return 0x40FF80;
+    }
+    if (state == BLE_SEARCHING || state == BLE_CONNECTED || state == BLE_DISCONNECTING) {
+        return 0xFFD040;
+    }
+    if (state == BLE_NOT_INIT) {
+        return 0x888888;
+    }
+    return 0xFFFFFF;
 }
 
 static void action_btn_cb(lv_event_t *e)
 {
     (void)e;
-    mark_touch_seen();
 
     connect_state_t conn = connect_logic_get_state();
     if (conn == BLE_NOT_INIT) {
-        ESP_LOGW(TAG, "Connect ignored: BLE still initializing");
         return;
     }
     if (conn == PROTOCOL_CONNECTED) {
         key_logic_request_record();
-    } else if (conn != BLE_SEARCHING && conn != BLE_DISCONNECTING) {
+    } else if (conn == BLE_INIT_COMPLETE) {
         key_logic_request_connect();
     }
 }
 
-static void style_action_button(bool enabled, bool recording)
+static void style_action_button(bool recording)
 {
     lv_color_t bg;
     lv_color_t border;
     const char *text;
     const char *guide;
+    bool enabled = false;
 
     connect_state_t conn = connect_logic_get_state();
 
@@ -114,15 +124,14 @@ static void style_action_button(bool enabled, bool recording)
         bg = lv_color_hex(0x303030);
         border = lv_color_hex(0x606060);
         text = "WAIT";
-        guide = "BLE starting...";
-        enabled = false;
-    } else if (conn == BLE_SEARCHING || conn == BLE_DISCONNECTING) {
-        bg = lv_color_hex(0x303030);
-        border = lv_color_hex(0x606060);
-        text = (conn == BLE_SEARCHING) ? "CONNECTING" : "DISCONNECT";
-        guide = "Please wait...";
-        enabled = false;
+        guide = "Bluetooth starting...";
+    } else if (conn == BLE_SEARCHING || conn == BLE_CONNECTED || conn == BLE_DISCONNECTING) {
+        bg = lv_color_hex(0x404020);
+        border = lv_color_hex(0xFFD040);
+        text = "CONNECTING";
+        guide = (conn == BLE_DISCONNECTING) ? "Hold on..." : "Finding your Osmo...";
     } else if (conn == PROTOCOL_CONNECTED) {
+        enabled = true;
         if (recording) {
             bg = lv_color_hex(0x802020);
             border = lv_color_hex(0xFF4040);
@@ -132,14 +141,13 @@ static void style_action_button(bool enabled, bool recording)
             bg = lv_color_hex(0x204020);
             border = lv_color_hex(0x40FF80);
             text = "START REC";
-            guide = "Tap to start recording";
+            guide = "Tap to record (BOOT works too)";
         }
-        enabled = true;
     } else {
         bg = lv_color_hex(0x203060);
         border = lv_color_hex(0x4080FF);
         text = "CONNECT";
-        guide = "Tap to find camera";
+        guide = "Tap to find your Osmo";
         enabled = true;
     }
 
@@ -182,12 +190,6 @@ static const char *ble_state_text(connect_state_t state)
 }
 #endif
 
-static void touch_probe_cb(lv_event_t *e)
-{
-    (void)e;
-    mark_touch_seen();
-}
-
 static void update_status_labels(void)
 {
     connect_state_t conn = connect_logic_get_state();
@@ -195,47 +197,33 @@ static void update_status_labels(void)
     bool gps_valid = is_current_gps_data_valid();
     bool recording = is_camera_recording();
 
-    lv_label_set_text(s_lbl_ble, ble_state_text(conn));
-
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-    if (conn == PROTOCOL_CONNECTED) {
-        lv_obj_set_style_text_color(s_lbl_ble, lv_color_hex(0x40FF80), 0);
-    } else if (conn == BLE_CONNECTED || conn == BLE_SEARCHING) {
-        lv_obj_set_style_text_color(s_lbl_ble, lv_color_hex(0xFFD040), 0);
-    } else {
-        lv_obj_set_style_text_color(s_lbl_ble, lv_color_hex(0xFFFFFF), 0);
-    }
+    set_status_row(s_lbl_ble, camera_status_text(conn), camera_status_color(conn));
 
     if (gps_valid) {
-        lv_label_set_text(s_lbl_gps, "GPS  fix");
-        lv_obj_set_style_text_color(s_lbl_gps, lv_color_hex(0x40FF80), 0);
+        set_status_row(s_lbl_gps, "GPS: Fix ready", 0x40FF80);
     } else if (gps_found) {
-        lv_label_set_text(s_lbl_gps, "GPS  wait");
-        lv_obj_set_style_text_color(s_lbl_gps, lv_color_hex(0xFFD040), 0);
+        set_status_row(s_lbl_gps, "GPS: Waiting for fix", 0xFFD040);
     } else {
-        lv_label_set_text(s_lbl_gps, "GPS  ---");
-        lv_obj_set_style_text_color(s_lbl_gps, lv_color_hex(0xFF6060), 0);
+        set_status_row(s_lbl_gps, "GPS: No signal", 0xFF6060);
     }
 
     if (conn == PROTOCOL_CONNECTED) {
-        lv_label_set_text(s_lbl_record, recording ? "REC  ON" : "REC  off");
-        lv_obj_set_style_text_color(s_lbl_record,
-                                     recording ? lv_color_hex(0xFF4040) : lv_color_hex(0xFFFFFF),
-                                     0);
+        set_status_row(s_lbl_record,
+                        recording ? "Record: Recording" : "Record: Ready",
+                        recording ? 0xFF4040 : 0xFFFFFF);
     } else {
-        lv_label_set_text(s_lbl_record, "REC  n/a");
-        lv_obj_set_style_text_color(s_lbl_record, lv_color_hex(0x888888), 0);
-    }
-
-    if (s_touch_seen && s_lbl_touch != NULL) {
-        lv_label_set_text(s_lbl_touch, "touch OK");
-        lv_obj_set_style_text_color(s_lbl_touch, lv_color_hex(0x40FF80), 0);
+        set_status_row(s_lbl_record, "Record: Connect first", 0x888888);
     }
 
     if (s_btn_action != NULL) {
-        style_action_button(true, recording);
+        style_action_button(recording);
     }
 #else
+    lv_label_set_text(s_lbl_ble, ble_state_text(conn));
+#endif
+
+#if !CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
     if (gps_valid) {
         lv_label_set_text(s_lbl_gps, "GPS: Valid fix (RMC+GGA)");
     } else if (gps_found) {
@@ -249,7 +237,7 @@ static void update_status_labels(void)
     } else {
         lv_label_set_text(s_lbl_record, "Recording: N/A");
     }
-#endif
+#endif /* !Waveshare */
 }
 
 static void display_ui_task(void *arg)
@@ -270,22 +258,16 @@ static void create_status_screen(void)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-    const int y_title = 22;
-    const int y_ble = 58;
-    const int y_gps = 88;
-    const int y_record = 118;
+    const int y_title = 28;
+    const int y_ble = 72;
+    const int y_gps = 102;
+    const int y_record = 132;
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "OSMO GPS");
-    lv_obj_set_style_text_font(title, STATUS_FONT_BODY, 0);
+    lv_label_set_text(title, "Osmo GPS");
+    lv_obj_set_style_text_font(title, STATUS_FONT_TITLE, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y_title);
-
-    s_lbl_touch = lv_label_create(scr);
-    lv_label_set_text(s_lbl_touch, "touch --");
-    lv_obj_set_style_text_font(s_lbl_touch, STATUS_FONT_HINT, 0);
-    lv_obj_set_style_text_color(s_lbl_touch, lv_color_hex(0x808080), 0);
-    lv_obj_align(s_lbl_touch, LV_ALIGN_TOP_MID, 0, y_title + 24);
 
     s_lbl_ble = lv_label_create(scr);
     style_status_label(s_lbl_ble);
@@ -300,25 +282,24 @@ static void create_status_screen(void)
     lv_obj_align(s_lbl_record, LV_ALIGN_TOP_MID, 0, y_record);
 
     s_btn_action = lv_button_create(scr);
-    lv_obj_set_size(s_btn_action, 168, 52);
-    lv_obj_align(s_btn_action, LV_ALIGN_BOTTOM_MID, 0, -44);
-    lv_obj_set_style_radius(s_btn_action, 26, LV_PART_MAIN);
+    lv_obj_set_size(s_btn_action, 160, 48);
+    lv_obj_align(s_btn_action, LV_ALIGN_BOTTOM_MID, 0, -48);
+    lv_obj_set_style_radius(s_btn_action, 24, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_btn_action, 0, LV_PART_MAIN);
     lv_obj_add_event_cb(s_btn_action, action_btn_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_action = lv_label_create(s_btn_action);
-    lv_obj_set_style_text_font(s_lbl_action, STATUS_FONT_BODY, 0);
+    lv_obj_set_style_text_font(s_lbl_action, STATUS_FONT_BTN, 0);
     lv_obj_set_style_text_color(s_lbl_action, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(s_lbl_action);
 
     s_lbl_guide = lv_label_create(scr);
     lv_obj_set_style_text_font(s_lbl_guide, STATUS_FONT_HINT, 0);
-    lv_obj_set_style_text_color(s_lbl_guide, lv_color_hex(0xB0B0B0), 0);
+    lv_obj_set_style_text_color(s_lbl_guide, lv_color_hex(0xA0A0A0), 0);
     lv_obj_set_style_text_align(s_lbl_guide, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(s_lbl_guide, STATUS_TEXT_W);
-    lv_obj_align(s_lbl_guide, LV_ALIGN_BOTTOM_MID, 0, -12);
-
-    lv_obj_add_flag(scr, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(scr, touch_probe_cb, LV_EVENT_CLICKED, NULL);
+    lv_label_set_long_mode(s_lbl_guide, LV_LABEL_LONG_WRAP);
+    lv_obj_align(s_lbl_guide, LV_ALIGN_BOTTOM_MID, 0, -10);
 #else
     const int margin = 12;
     const int content_w = STATUS_LCD_HRES - 2 * margin;

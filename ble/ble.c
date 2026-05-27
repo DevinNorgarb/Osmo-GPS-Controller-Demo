@@ -132,8 +132,20 @@ void ble_reset_scan_state(void) {
     s_scan_dji_count = 0;
 }
 
+bool ble_is_scan_active(void) {
+    return s_gap_scan_running;
+}
+
 esp_err_t ble_stop_scanning(void) {
-    return esp_ble_gap_stop_scanning();
+    if (!s_gap_scan_running) {
+        return ESP_OK;
+    }
+    esp_err_t ret = esp_ble_gap_stop_scanning();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "stop_scanning: %s", esp_err_to_name(ret));
+        s_gap_scan_running = false;
+    }
+    return ret;
 }
 
 static void trigger_scan_task(void) {
@@ -665,8 +677,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                     s_found_previous_device = true;
                     ESP_LOGI(TAG, "Found previous device: %s, RSSI: %d", adv_name_str, r->scan_rst.rssi);
                     if (!s_connecting && !s_ble_profile.connection_status.is_connected) {
-                        s_gap_scan_running = false;
-                        esp_ble_gap_stop_scanning();
+                        ble_stop_scanning();
                         try_to_connect(best_addr);
                     }
                 }
@@ -680,8 +691,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                     s_remote_device_name[sizeof(s_remote_device_name) - 1] = '\0';
                     if (!s_connecting && !s_ble_profile.connection_status.is_connected) {
                         ESP_LOGI(TAG, "DJI camera in range, connecting (RSSI=%d)", r->scan_rst.rssi);
-                        s_gap_scan_running = false;
-                        esp_ble_gap_stop_scanning();
+                        ble_stop_scanning();
                         try_to_connect(best_addr);
                     }
                 }
