@@ -2,7 +2,8 @@
 #pragma once
 
 #include "esp_err.h"
-#include "lvgl.h"
+
+typedef struct _lv_display_t lv_display_t;
 
 #define LILYPI_LCD_HRES  480
 #define LILYPI_LCD_VRES  320

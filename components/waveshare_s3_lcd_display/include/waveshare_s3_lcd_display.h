@@ -2,7 +2,8 @@
 #pragma once
 
 #include "esp_err.h"
-#include "lvgl.h"
+
+typedef struct _lv_display_t lv_display_t;
 
 #define WAVESHARE_S3_LCD_HRES  240
 #define WAVESHARE_S3_LCD_VRES  240
