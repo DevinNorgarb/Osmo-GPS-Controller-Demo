@@ -105,4 +105,8 @@ bool is_gps_found(void);
 
 bool is_current_gps_data_valid(void);
 
+double gps_get_latitude(void);
+
+double gps_get_longitude(void);
+
 #endif

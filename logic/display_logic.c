@@ -5,6 +5,8 @@
 
 #if CONFIG_LILYGO_LILY_PI || CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
 
+#include <stdio.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -34,6 +36,7 @@
 
 static lv_obj_t *s_lbl_ble;
 static lv_obj_t *s_lbl_gps;
+static lv_obj_t *s_lbl_gps_coord;
 static lv_obj_t *s_lbl_record;
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
@@ -202,10 +205,21 @@ static void update_status_labels(void)
 
     if (gps_valid) {
         set_status_row(s_lbl_gps, "GPS: Fix ready", 0x40FF80);
+        if (s_lbl_gps_coord != NULL) {
+            char coord[64];
+            snprintf(coord, sizeof(coord), "Lat: %.5f  Lng: %.5f", gps_get_latitude(), gps_get_longitude());
+            set_status_row(s_lbl_gps_coord, coord, 0xFFFFFF);
+        }
     } else if (gps_found) {
         set_status_row(s_lbl_gps, "GPS: Waiting for fix", 0xFFD040);
+        if (s_lbl_gps_coord != NULL) {
+            set_status_row(s_lbl_gps_coord, "Lat: --  Lng: --", 0x888888);
+        }
     } else {
         set_status_row(s_lbl_gps, "GPS: No signal", 0xFF6060);
+        if (s_lbl_gps_coord != NULL) {
+            set_status_row(s_lbl_gps_coord, "Lat: --  Lng: --", 0x888888);
+        }
     }
 
     if (conn == PROTOCOL_CONNECTED) {
@@ -259,9 +273,10 @@ static void create_status_screen(void)
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
     const int y_title = 28;
-    const int y_ble = 72;
-    const int y_gps = 102;
-    const int y_record = 132;
+    const int y_ble = 68;
+    const int y_gps = 96;
+    const int y_gps_coord = 120;
+    const int y_record = 144;
 
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "Osmo GPS");
@@ -276,6 +291,10 @@ static void create_status_screen(void)
     s_lbl_gps = lv_label_create(scr);
     style_status_label(s_lbl_gps);
     lv_obj_align(s_lbl_gps, LV_ALIGN_TOP_MID, 0, y_gps);
+
+    s_lbl_gps_coord = lv_label_create(scr);
+    style_status_label(s_lbl_gps_coord);
+    lv_obj_align(s_lbl_gps_coord, LV_ALIGN_TOP_MID, 0, y_gps_coord);
 
     s_lbl_record = lv_label_create(scr);
     style_status_label(s_lbl_record);

@@ -25,16 +25,16 @@ The ESP32-S3-Touch-LCD-1.28 is a low-cost, high-performance microcontroller deve
 
 ## Onboard resources
 
-1. **ESP32-S3R2** — Wi-Fi / Bluetooth SoC, 240 MHz, 2 MB PSRAM on package
-2. **W25Q128JVSIQ** — 16 MB NOR Flash
-3. **CH343P** — USB to UART
-4. **ME6217C33M5G** — 800 mA LDO, low dropout, high PSRR
-5. **ETA6096** — Lithium battery charger
-6. **QMI8658** — 6-axis IMU (3-axis gyro + 3-axis accelerometer)
-7. **MX1.25** — 2P battery connector (3.7 V, charge/discharge)
-8. **USB Type-C** — Flashing and serial logging
+1. **ESP32-S3R2 / ESP32-S3RH2** — Wi‑Fi / Bluetooth SoC, up to 240 MHz, **2 MB PSRAM** on package
+2. **W25Q128JVSIQ** — **16 MB** NOR Flash
+3. **CH343P** — USB‑to‑UART bridge
+4. **MP1605** — Power module (up to **3.3 V / 2 A** output)
+5. **ETA6096** — High‑efficiency lithium battery charge manager
+6. **QMI8658** — 6‑axis IMU (3‑axis gyro + 3‑axis accelerometer)
+7. **MX1.25 battery header** — 2‑pin connector for **3.7 V** Li‑ion (charge/discharge)
+8. **USB Type‑C connector** — flashing + serial logging (USB 1.1 host/slave support per Waveshare)
 9. **RESET** button
-10. **BOOT** button — Hold while resetting to enter download mode
+10. **BOOT** button — press/hold during reset to enter download mode
 
 See the [wiki resource diagram](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.28#Onboard_Resources).
 
@@ -46,7 +46,9 @@ CH343P USB-UART to ESP32-S3 **GPIO43** (`UART_TXD`) and **GPIO44** (`UART_RXD`) 
 
 ### SH1.0 connector
 
-Six GPIOs for external use (I2C, SPI, etc.). **VSYS** accepts 5 V input to power the board.
+12-pin FPC on the left edge: power (GND, VSYS, 3V3), BOOT/RESET straps, and six GPIOs (15, 16, 17, 18, 21, 33). **VSYS** accepts 5 V input to power the board. This firmware uses **GPIO16/17** as **UART2** for GNSS.
+
+**NEO-M8 GPS wiring (pin table + diagram):** [docs/waveshare-neo-m8-gps-wiring.md](docs/waveshare-neo-m8-gps-wiring.md)
 
 ### LCD
 

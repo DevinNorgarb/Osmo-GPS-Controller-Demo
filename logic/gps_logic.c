@@ -110,6 +110,14 @@ bool is_current_gps_data_valid(void) {
     return false;
 }
 
+double gps_get_latitude(void) {
+    return GPS_Data.Latitude;
+}
+
+double gps_get_longitude(void) {
+    return GPS_Data.Longitude;
+}
+
 // Store previous altitude and time for velocity calculation
 // 用于存储前一时刻的高度和时间，用于计算速度
 static double Previous_Altitude = 0.0;
