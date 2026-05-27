@@ -41,4 +41,10 @@ void key_logic_init(void);
 
 key_event_t key_logic_get_event(void);
 
+/** Same worker as long-press BOOT: BLE + protocol connect. Safe to call from UI. */
+void key_logic_request_connect(void);
+
+/** Same worker as single-press BOOT: record toggle. Requires PROTOCOL_CONNECTED. */
+void key_logic_request_record(void);
+
 #endif

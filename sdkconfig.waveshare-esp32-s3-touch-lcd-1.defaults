@@ -6,9 +6,14 @@ CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 
-CONFIG_SPIRAM=y
-CONFIG_SPIRAM_MODE_OCT=y
-CONFIG_SPIRAM_USE_MALLOC=y
+# ESP32-S3R2 has 2MB embedded PSRAM (octal). If boot loops with
+# "octal_psram: PSRAM chip is not connected", keep SPIRAM off and use smaller LVGL buffers.
+# CONFIG_SPIRAM is not set
 
-# LVGL status screen
+# LVGL + BLE firmware exceeds default 1MB factory partition (use 2M app)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_waveshare.csv"
+
+# LVGL status screen — larger font for 1.28" round panel
 CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_20=y

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -83,6 +83,14 @@ typedef void (*connect_logic_state_callback_t)(void);
 esp_err_t ble_init();
 
 esp_err_t ble_start_scanning_and_connect(void);
+
+/** Keep restarting scan until ble_stop_scanning() or a connection attempt starts. */
+void ble_set_continuous_scan(bool enable);
+
+esp_err_t ble_stop_scanning(void);
+
+/** Clear scan counters/flags before a new connect attempt. */
+void ble_reset_scan_state(void);
 
 void ble_set_reconnecting(bool flag);
 

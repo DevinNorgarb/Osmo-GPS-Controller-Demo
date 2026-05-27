@@ -2,6 +2,10 @@
 
 #include "lilypi_display.h"
 
+#include "sdkconfig.h"
+
+#if CONFIG_LILYGO_LILY_PI
+
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_lcd_panel_io.h"
@@ -112,3 +116,17 @@ lv_display_t *lilypi_display_get_lv_display(void)
 {
     return s_lv_disp;
 }
+
+#else /* CONFIG_LILYGO_LILY_PI */
+
+esp_err_t lilypi_display_hw_init(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+lv_display_t *lilypi_display_get_lv_display(void)
+{
+    return NULL;
+}
+
+#endif /* CONFIG_LILYGO_LILY_PI */

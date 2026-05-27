@@ -47,19 +47,14 @@ void app_main(void) {
         return;
     }
 
-    res = display_logic_init();
-    if (res != 0) {
-        return;
-    }
-
     /* Initialize GPS module */
     /* 初始化 GPS 模块 */
     initSendGpsDataToCameraTask();
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-    /* Initialize Bluetooth */
-    /* 初始化蓝牙 */
+    /* Initialize Bluetooth before display touch UI (CONNECT button needs BLE ready) */
+    /* 在显示触摸 UI 之前初始化蓝牙（CONNECT 按钮依赖 BLE 就绪） */
     res = connect_logic_ble_init();
     if (res != 0) {
         return;
@@ -68,6 +63,11 @@ void app_main(void) {
     /* Initialize key logic */
     /* 初始化按键逻辑 */
     key_logic_init();
+
+    res = display_logic_init();
+    if (res != 0) {
+        return;
+    }
 
     /* 测试 GPS 推送 */
     /* Test GPS Data Push */

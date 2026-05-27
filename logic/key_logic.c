@@ -75,6 +75,11 @@ static TaskHandle_t s_record_task_handle = NULL;
  * Get device version info and subscribe to camera status.
  */
 static void handle_boot_long_press() {
+    if (connect_logic_get_state() == BLE_NOT_INIT) {
+        ESP_LOGE(TAG, "BLE not ready yet; wait for boot to finish initializing.");
+        return;
+    }
+
     /* 初始化数据层 */
     /* Initialize data layer */
     if (!is_data_layer_initialized()) {
@@ -252,7 +257,7 @@ static void key_record_worker_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-static void schedule_boot_long_press(void) {
+void key_logic_request_connect(void) {
     if (s_connect_task_handle != NULL) {
         ESP_LOGW(TAG, "Connect already in progress, ignoring long press");
         return;
@@ -270,7 +275,7 @@ static void schedule_boot_long_press(void) {
     }
 }
 
-static void schedule_boot_single_press(void) {
+void key_logic_request_record(void) {
     if (s_record_task_handle != NULL) {
         ESP_LOGW(TAG, "Record action already in progress, ignoring single press");
         return;
@@ -317,7 +322,7 @@ static void key_scan_task(void *arg) {
                 // 长按事件（持续按下达到阈值时立即触发）
                 // Long press event (triggered immediately when threshold is reached)
                 current_key_event = KEY_EVENT_LONG_PRESS;
-                schedule_boot_long_press();
+                key_logic_request_connect();
                 // ESP_LOGI(TAG, "Long press detected. Duration: %lu ticks", press_duration);
             }
         } else if (new_key_state == 1 && key_pressed) { // 按键松开 / Key released
@@ -329,7 +334,7 @@ static void key_scan_task(void *arg) {
                 current_key_event = KEY_EVENT_SINGLE;
                 ESP_LOGI(TAG, "Single press detected (%lu ms).",
                          (unsigned long)(press_duration * portTICK_PERIOD_MS));
-                schedule_boot_single_press();
+                key_logic_request_record();
             } else {
                 ESP_LOGI(TAG, "BOOT key released after long press (no single-click action).");
             }

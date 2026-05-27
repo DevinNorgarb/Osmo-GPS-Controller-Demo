@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2025 SZ DJI Technology Co., Ltd.
- *  
+ *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
  * to DJI and may be covered by U.S. and foreign patents, patents in process,
@@ -115,25 +115,39 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
                                 esp_gatt_if_t gattc_if,
                                 esp_ble_gattc_cb_param_t *param);
 
-static TimerHandle_t scan_timer;
+static bool s_continuous_scan = false;
+static bool s_gap_scan_running = false;
+static int s_scan_adv_count = 0;
+static int s_scan_dji_count = 0;
 
-void scan_stop_timer_callback(TimerHandle_t xTimer) {
-    esp_ble_gap_stop_scanning();
-    ESP_LOGI(TAG, "Scan stopped after timeout");
+#define BLE_SCAN_DURATION_SEC 30
+
+void ble_set_continuous_scan(bool enable) {
+    s_continuous_scan = enable;
+}
+
+void ble_reset_scan_state(void) {
+    s_gap_scan_running = false;
+    s_scan_adv_count = 0;
+    s_scan_dji_count = 0;
+}
+
+esp_err_t ble_stop_scanning(void) {
+    return esp_ble_gap_stop_scanning();
 }
 
 static void trigger_scan_task(void) {
-    ESP_LOGI(TAG, "esp_ble_gap_start_scanning...");
-    esp_err_t ret = esp_ble_gap_start_scanning(4);
+    if (s_gap_scan_running) {
+        ESP_LOGW(TAG, "Scan already active, skip duplicate start");
+        return;
+    }
+    ESP_LOGI(TAG, "esp_ble_gap_start_scanning (%ds)...", BLE_SCAN_DURATION_SEC);
+    esp_err_t ret = esp_ble_gap_start_scanning(BLE_SCAN_DURATION_SEC);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start scanning: %s", esp_err_to_name(ret));
+        return;
     }
-    // Start a timer to stop scanning after 4 seconds
-    // 启动定时器，在4秒后停止扫描
-    scan_timer = xTimerCreate("scan_timer", pdMS_TO_TICKS(4000), pdFALSE, (void *)0, scan_stop_timer_callback);
-    if (scan_timer != NULL) {
-        xTimerStart(scan_timer, 0);
-    }
+    s_gap_scan_running = true;
 }
 
 /* -------------------------
@@ -243,8 +257,10 @@ esp_err_t ble_start_scanning_and_connect(void) {
         return ble_reconnect();
     }
 
-    // Reset scan-related variables
-    // 重置扫描相关变量
+    // Reset scan-related variables (scan stop/start is handled by connect_logic)
+    // 重置扫描相关变量（扫描启停由 connect_logic 统一管理）
+    s_scan_adv_count = 0;
+    s_scan_dji_count = 0;
     memset(best_addr, 0, sizeof(esp_bd_addr_t));
     best_rssi = -128;
     memset(s_remote_device_name, 0, ESP_BLE_ADV_NAME_LEN_MAX);
@@ -310,7 +326,7 @@ bool ble_get_reconnecting(void) {
 /**
  * @brief Reconnect to the last connected device
  * 重新连接到上一次连接的设备
- * 
+ *
  * @note Only applicable to non-active disconnection situations, as device information is not cleared
  *       仅适用于非主动断开连接的情况，因为设备信息未被清除
  * @return esp_err_t
@@ -340,11 +356,11 @@ esp_err_t ble_reconnect(void) {
     // 设置重连模式标记
     s_is_reconnecting = true;
     s_found_previous_device = false;  // Reset discovery flag
-    
+
     // Start scan task
     // 开始扫描任务
     trigger_scan_task();
-    
+
     return ESP_OK;
 }
 
@@ -541,7 +557,7 @@ static uint8_t bsp_link_is_dji_camera_adv(esp_ble_gap_cb_param_t *scan_result) {
 
     for (int i = 0; i < adv_len; ) {
         const uint8_t len = ble_adv[i];
-        
+
         if (len == 0 || (i + len + 1) > adv_len) break;
 
         const uint8_t type = ble_adv[i+1];
@@ -567,32 +583,51 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         trigger_scan_task();
         break;
 
-    case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
-        ESP_LOGI(TAG, "scan stopped");
+    case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT: {
+        const bool was_running = s_gap_scan_running;
+        s_gap_scan_running = false;
+        if (!was_running && s_scan_adv_count == 0) {
+            ESP_LOGD(TAG, "Ignoring spurious scan-stop event");
+            break;
+        }
+        ESP_LOGI(TAG, "scan stopped (adv=%d, dji=%d, best_rssi=%d)",
+                 s_scan_adv_count, s_scan_dji_count, best_rssi);
+        if (s_scan_adv_count > 0 && s_scan_dji_count == 0) {
+            ESP_LOGW(TAG, "BLE scan OK but no DJI camera adverts — power Osmo on, keep awake, stay within ~5m");
+        }
+        s_scan_adv_count = 0;
+        s_scan_dji_count = 0;
         // After scanning ends, decide whether to connect based on reconnection mode and device discovery status
         // 扫描结束后，根据重连模式和设备发现状态决定是否连接
         if (best_rssi > -128) {
             if (!ble_get_reconnecting() || (ble_get_reconnecting() && s_found_previous_device)) {
                 try_to_connect(best_addr);
-                ESP_LOGI(TAG, "Connected to device: %02x:%02x:%02x:%02x:%02x:%02x",
+                ESP_LOGI(TAG, "Connecting to device: %02x:%02x:%02x:%02x:%02x:%02x",
                          best_addr[0], best_addr[1], best_addr[2], best_addr[3], best_addr[4], best_addr[5]);
             } else {
                 ESP_LOGW(TAG, "In reconnection mode but target device not found");
             }
         } else {
             ESP_LOGW(TAG, "No suitable device found with sufficient signal strength");
+            if (s_continuous_scan && !s_connecting) {
+                ESP_LOGI(TAG, "Restarting scan...");
+                trigger_scan_task();
+            }
         }
         s_is_reconnecting = false;
         break;
+    }
 
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
         esp_ble_gap_cb_param_t *r = param;
         if (r->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
+            s_scan_adv_count++;
             // Check if it is a DJI camera advertisement
             // 检查是否为 DJI 相机广播
             if (!bsp_link_is_dji_camera_adv(r)) {
                 break;
             }
+            s_scan_dji_count++;
             // Get the complete name from the advertisement data
             // 获取广播数据里的完整名称
             uint8_t *adv_name = NULL;
@@ -629,6 +664,11 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                 if (memcmp(best_addr, r->scan_rst.bda, sizeof(esp_bd_addr_t)) == 0) {
                     s_found_previous_device = true;
                     ESP_LOGI(TAG, "Found previous device: %s, RSSI: %d", adv_name_str, r->scan_rst.rssi);
+                    if (!s_connecting && !s_ble_profile.connection_status.is_connected) {
+                        s_gap_scan_running = false;
+                        esp_ble_gap_stop_scanning();
+                        try_to_connect(best_addr);
+                    }
                 }
             } else {
                 // In normal scan mode, record the device with the strongest signal
@@ -638,6 +678,12 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                     memcpy(best_addr, r->scan_rst.bda, sizeof(esp_bd_addr_t));
                     strncpy(s_remote_device_name, adv_name_str, sizeof(s_remote_device_name) - 1);
                     s_remote_device_name[sizeof(s_remote_device_name) - 1] = '\0';
+                    if (!s_connecting && !s_ble_profile.connection_status.is_connected) {
+                        ESP_LOGI(TAG, "DJI camera in range, connecting (RSSI=%d)", r->scan_rst.rssi);
+                        s_gap_scan_running = false;
+                        esp_ble_gap_stop_scanning();
+                        try_to_connect(best_addr);
+                    }
                 }
             }
         }
@@ -671,7 +717,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         memcpy(s_ble_profile.remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
         ESP_LOGI(TAG, "Connected, conn_id=%d", s_ble_profile.conn_id);
 
-        ESP_LOGI(TAG, "Connect to camera MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
+        ESP_LOGI(TAG, "Connect to camera MAC: %02X:%02X:%02X:%02X:%02X:%02X",
             param->connect.remote_bda[0],
             param->connect.remote_bda[1],
             param->connect.remote_bda[2],
@@ -882,7 +928,7 @@ esp_err_t ble_start_advertising() {
         };
         esp_timer_create(&timer_args, &adv_timer);
     }
-    
+
     esp_timer_start_once(adv_timer, 2000000);  // 2000ms = 2,000,000us
 
     ESP_LOGI(TAG, "Advertising started (will auto-stop after 2s)");
