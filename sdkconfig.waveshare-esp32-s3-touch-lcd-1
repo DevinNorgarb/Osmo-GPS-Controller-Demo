@@ -4390,44 +4390,6 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # end of Wi-Fi Provisioning Manager
 
 #
-# CMake Utilities
-#
-# default:
-# CONFIG_CU_RELINKER_ENABLE is not set
-# default:
-# CONFIG_CU_DIAGNOSTICS_COLOR_NEVER is not set
-# default:
-CONFIG_CU_DIAGNOSTICS_COLOR_ALWAYS=y
-# default:
-# CONFIG_CU_DIAGNOSTICS_COLOR_AUTO is not set
-# default:
-# CONFIG_CU_GCC_LTO_ENABLE is not set
-# default:
-# CONFIG_CU_GCC_STRING_1BYTE_ALIGN is not set
-# end of CMake Utilities
-
-#
-# ESP LCD TOUCH
-#
-# default:
-CONFIG_ESP_LCD_TOUCH_MAX_POINTS=5
-# default:
-CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS=1
-# end of ESP LCD TOUCH
-
-#
-# ESP LCD TOUCH - CST816S
-#
-# default:
-# CONFIG_ESP_LCD_TOUCH_CST816S_DISABLE_READ_ID is not set
-# end of ESP LCD TOUCH - CST816S
-
-#
-# ESP LVGL PORT
-#
-# end of ESP LVGL PORT
-
-#
 # LVGL configuration
 #
 # default:
@@ -4700,11 +4662,11 @@ CONFIG_LV_FONT_MONTSERRAT_14=y
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_16 is not set
 # default:
-# CONFIG_LV_FONT_MONTSERRAT_18 is not set
+CONFIG_LV_FONT_MONTSERRAT_18=y
 # default:
 CONFIG_LV_FONT_MONTSERRAT_20=y
 # default:
-# CONFIG_LV_FONT_MONTSERRAT_22 is not set
+CONFIG_LV_FONT_MONTSERRAT_22=y
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_24 is not set
 # default:
@@ -5151,6 +5113,44 @@ CONFIG_LV_BUILD_DEMOS=y
 # CONFIG_LV_USE_DEMO_HIGH_RES is not set
 # end of Demos
 # end of LVGL configuration
+
+#
+# CMake Utilities
+#
+# default:
+# CONFIG_CU_RELINKER_ENABLE is not set
+# default:
+# CONFIG_CU_DIAGNOSTICS_COLOR_NEVER is not set
+# default:
+CONFIG_CU_DIAGNOSTICS_COLOR_ALWAYS=y
+# default:
+# CONFIG_CU_DIAGNOSTICS_COLOR_AUTO is not set
+# default:
+# CONFIG_CU_GCC_LTO_ENABLE is not set
+# default:
+# CONFIG_CU_GCC_STRING_1BYTE_ALIGN is not set
+# end of CMake Utilities
+
+#
+# ESP LCD TOUCH
+#
+# default:
+CONFIG_ESP_LCD_TOUCH_MAX_POINTS=5
+# default:
+CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS=1
+# end of ESP LCD TOUCH
+
+#
+# ESP LCD TOUCH - CST816S
+#
+# default:
+# CONFIG_ESP_LCD_TOUCH_CST816S_DISABLE_READ_ID is not set
+# end of ESP LCD TOUCH - CST816S
+
+#
+# ESP LVGL PORT
+#
+# end of ESP LVGL PORT
 # end of Component config
 
 # default:

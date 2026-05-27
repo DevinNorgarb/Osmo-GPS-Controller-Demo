@@ -1,0 +1,5 @@
+# Waveshare ESP32-S3-Touch-LCD-1.28 (16MB flash) — LVGL + BLE needs >1MB app
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     ,        0x6000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, ,        2M,

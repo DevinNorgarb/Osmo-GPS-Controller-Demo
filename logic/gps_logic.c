@@ -24,6 +24,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
 #include "gps_logic.h"
@@ -36,7 +37,7 @@
 #define GPS_PUSH_INTERVAL_MS 100
 
 #if CONFIG_WAVESHARE_ESP32_S3_TOUCH_LCD_128
-#define GPS_UART_BAUD_FINAL   115200
+#define GPS_UART_BAUD_FINAL   9600
 #define GPS_UART_BAUD_PROBE   9600
 #else
 #define GPS_UART_BAUD_FINAL   115200
@@ -54,6 +55,9 @@ static GPS_Data_t GPS_Data;
 // Counter for consecutive invalid GPS readings
 // GPS连续无效次数计数器
 static uint8_t gps_invalid_count = 0;
+
+static volatile uint32_t s_gps_rx_bytes_total = 0;
+static volatile int64_t s_gps_last_nmea_us = 0;
 
 /**
  * @brief Initialize GPS data structure
@@ -697,6 +701,7 @@ static void log_gps_uart_chunk(const uint8_t *data, int len) {
     }
 
     if (has_nmea) {
+        s_gps_last_nmea_us = esp_timer_get_time();
         char line[128];
         int line_len = 0;
         for (int i = 0; i < len && line_len < (int)sizeof(line) - 1; i++) {
@@ -760,13 +765,6 @@ static void ubx_send(const uint8_t *payload, uint16_t payload_len, uint8_t cls, 
 
 static void configure_ublox_neo_m8(void)
 {
-    static const uint8_t cfg_prt[] = {
-        0x01, 0x00, 0x00, 0x00,
-        0xD0, 0x08, 0x00, 0x00,
-        0x00, 0xC2, 0x01, 0x00,
-        0x07, 0x00, 0x03, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    };
     static const uint8_t cfg_rate[] = {
         0x64, 0x00, 0x01, 0x00, 0x00, 0x00,
     };
@@ -774,16 +772,11 @@ static void configure_ublox_neo_m8(void)
     static const uint8_t cfg_msg_rmc[] = { 0xF0, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
     static const uint8_t cfg_msg_gst[] = { 0xF0, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
 
-    ubx_send(cfg_prt, sizeof(cfg_prt), 0x06, 0x00);
-    vTaskDelay(pdMS_TO_TICKS(200));
-    uart_set_baudrate(BOARD_GPS_UART_PORT, GPS_UART_BAUD_FINAL);
-    vTaskDelay(pdMS_TO_TICKS(50));
-
     ubx_send(cfg_rate, sizeof(cfg_rate), 0x06, 0x08);
     ubx_send(cfg_msg_gga, sizeof(cfg_msg_gga), 0x06, 0x01);
     ubx_send(cfg_msg_rmc, sizeof(cfg_msg_rmc), 0x06, 0x01);
     ubx_send(cfg_msg_gst, sizeof(cfg_msg_gst), 0x06, 0x01);
-    ESP_LOGI(TAG, "Configured u-blox NEO-M8: 115200 8N1, 10 Hz, GGA+RMC+GST");
+    ESP_LOGI(TAG, "Configured u-blox NEO-M8: %d baud, 10 Hz, GGA+RMC+GST", GPS_UART_BAUD_FINAL);
 }
 #endif
 
@@ -845,6 +838,7 @@ static void rx_task_GPS(void *arg)
     while (1) {
         const int rxBytes = uart_read_bytes(BOARD_GPS_UART_PORT, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
         if (rxBytes > 0) {
+            s_gps_rx_bytes_total += (uint32_t)rxBytes;
             // 给看门狗喂狗的机会
             // Give watchdog a chance to reset
             vTaskDelay(pdMS_TO_TICKS(5));
@@ -876,6 +870,25 @@ static void rx_task_GPS(void *arg)
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     free(data);
+}
+
+uint32_t gps_get_rx_bytes_total(void)
+{
+    return s_gps_rx_bytes_total;
+}
+
+uint32_t gps_get_last_nmea_ms_ago(void)
+{
+    int64_t last = s_gps_last_nmea_us;
+    if (last <= 0) {
+        return UINT32_MAX;
+    }
+    int64_t now = esp_timer_get_time();
+    int64_t delta_us = now - last;
+    if (delta_us < 0) {
+        return UINT32_MAX;
+    }
+    return (uint32_t)(delta_us / 1000);
 }
 
 /**

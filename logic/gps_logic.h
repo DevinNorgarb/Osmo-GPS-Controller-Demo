@@ -23,6 +23,7 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include <stdint.h>
 
 #define UBYTE   uint8_t
 #define UWORD   uint16_t
@@ -112,5 +113,11 @@ double gps_get_longitude(void);
 double gps_get_altitude(void);
 
 uint8_t gps_get_num_satellites(void);
+
+/** Total UART RX bytes observed since boot (any baud). */
+uint32_t gps_get_rx_bytes_total(void);
+
+/** Milliseconds since last chunk containing a '$' (NMEA start). UINT32_MAX if never. */
+uint32_t gps_get_last_nmea_ms_ago(void);
 
 #endif

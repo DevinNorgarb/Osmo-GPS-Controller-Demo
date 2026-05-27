@@ -151,7 +151,8 @@ esp_err_t waveshare_s3_lcd_display_hw_init(void)
 
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
-    esp_lcd_panel_invert_color(panel_handle, true);
+    /* Leave inversion off; byte swap above handles the common “psychedelic colors” issue. */
+    esp_lcd_panel_invert_color(panel_handle, false);
     esp_lcd_panel_mirror(panel_handle, true, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
 
@@ -165,7 +166,8 @@ esp_err_t waveshare_s3_lcd_display_hw_init(void)
         .hres = WAVESHARE_S3_LCD_HRES,
         .vres = WAVESHARE_S3_LCD_VRES,
         .monochrome = false,
-        .color_format = LV_COLOR_FORMAT_RGB565,
+        /* Fix common “weird neon colors”: this panel/port expects byte-swapped RGB565. */
+        .color_format = LV_COLOR_FORMAT_RGB565_SWAPPED,
         .rotation = {
             .swap_xy = false,
             .mirror_x = true,

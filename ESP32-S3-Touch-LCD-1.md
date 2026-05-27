@@ -126,6 +126,24 @@ Supports **Arduino IDE** and **MicroPython**.
 
 **Download mode:** Long-press **BOOT**, tap **RESET**, release **BOOT**.
 
+### Build troubleshooting (PlatformIO)
+
+`managed_components/` is gitignored and downloaded on first configure. If you see `lvgl__lvgl/Kconfig not found`, `lvgl.h: No such file`, or **corrupted lvgl** errors:
+
+```bash
+./scripts/repair_managed_components.sh
+```
+
+Or manually:
+
+```bash
+~/.platformio/penv/.espidf-5.5.4/bin/python -m idf_component_manager cache clear
+rm -rf managed_components components/lvgl .pio/build/waveshare-esp32-s3-touch-lcd-1
+pio run -e waveshare-esp32-s3-touch-lcd-1 -j 1
+```
+
+Use **`-j 1`** for the first build after a clean; parallel jobs can leave `lvgl__lvgl` half-copied (`lvgl.h` / `Kconfig not found`). Do not run `registry sync` into `managed_components/` — that creates a stray nested `managed_components/components/` tree. The pre-build script removes stray paths if they appear.
+
 ### TFT_eSPI (Arduino) notes
 
 For [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) on this board, use HSPI and typical GPIO mapping (verify against schematic):

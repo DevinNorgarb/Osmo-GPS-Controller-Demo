@@ -14,6 +14,8 @@ CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_waveshare.csv"
 
-# LVGL status screen — larger font for 1.28" round panel
+# LVGL status screen — readable on 1.28" round panel (~32 mm diameter)
 CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_18=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_22=y

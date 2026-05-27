@@ -1,0 +1,5 @@
+## Use vendored LVGL (components/lvgl) — registry unpack is unreliable on macOS.
+dependencies:
+  lvgl/lvgl:
+    version: "9.5.0"
+    override_path: "components/lvgl"
